@@ -61,8 +61,7 @@ bot = VTrackerBot()
 # Botunu Çalıştıracak Token
 BOT_TOKEN = os.getenv("DISCORD_TOKEN")
 
-if __name__ == "__main__":
-    # 1. Arka planda web sunucusunu (Flask) başlatır (Render / UptimeRobot için)
-    keep_alive()
-    # 2. Discord botunu başlatır
-    bot.run(BOT_TOKEN)
+if __name__ == '__main__':
+  keep_alive()
+  token = os.getenv('DISCORD_TOKEN')
+  bot.run(token)
