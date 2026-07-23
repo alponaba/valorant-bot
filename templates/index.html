@@ -2,21 +2,566 @@
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
-    <title>V-Tracker.gg | Valorant Discord Botu</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>V-Tracker.gg | Valorant Discord İstatistik & Taktik Botu</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Rajdhani:wght@600;700&display=swap" rel="stylesheet">
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
     <style>
-        body { background-color: #0f1923; color: #ece8e1; font-family: Arial, sans-serif; text-align: center; padding-top: 100px; }
-        h1 { color: #ff4655; font-size: 48px; }
-        p { font-size: 18px; color: #83939a; }
-        .btn { background-color: #ff4655; color: white; padding: 15px 30px; text-decoration: none; font-weight: bold; border-radius: 5px; display: inline-block; margin-top: 20px; }
-        .btn:hover { background-color: #fa4454; }
+        :root {
+            --bg-main: #0b0e14;
+            --bg-card: rgba(15, 25, 35, 0.7);
+            --bg-card-border: rgba(255, 70, 85, 0.2);
+            --val-red: #ff4655;
+            --val-red-hover: #e03e4d;
+            --val-cyan: #00f0ff;
+            --val-purple: #8a2be2;
+            --text-main: #ece8e1;
+            --text-muted: #7e8c9b;
+            --font-head: 'Rajdhani', sans-serif;
+            --font-body: 'Plus Jakarta Sans', sans-serif;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            scroll-behavior: smooth;
+        }
+
+        body {
+            background-color: var(--bg-main);
+            color: var(--text-main);
+            font-family: var(--font-body);
+            overflow-x: hidden;
+            background-image: 
+                radial-gradient(circle at 15% 20%, rgba(255, 70, 85, 0.08) 0%, transparent 45%),
+                radial-gradient(circle at 85% 60%, rgba(138, 43, 226, 0.08) 0%, transparent 40%),
+                radial-gradient(circle at 50% 90%, rgba(0, 240, 255, 0.05) 0%, transparent 50%);
+            background-attachment: fixed;
+        }
+
+        /* Top Announcement Bar */
+        .top-bar {
+            background: linear-gradient(90deg, rgba(255,70,85,0.2) 0%, rgba(138,43,226,0.2) 100%);
+            border-bottom: 1px solid rgba(255, 70, 85, 0.3);
+            text-align: center;
+            padding: 8px 15px;
+            font-size: 13px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+        .top-bar span {
+            background: var(--val-red);
+            color: white;
+            padding: 2px 8px;
+            border-radius: 3px;
+            font-size: 11px;
+            margin-right: 8px;
+            font-weight: 800;
+        }
+
+        /* Navbar */
+        nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 8%;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-family: var(--font-head);
+            font-size: 26px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            color: #fff;
+            text-transform: uppercase;
+        }
+        .logo i {
+            color: var(--val-red);
+            font-size: 28px;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 30px;
+            list-style: none;
+        }
+
+        .nav-links a {
+            color: var(--text-muted);
+            text-decoration: none;
+            font-weight: 500;
+            font-size: 15px;
+            transition: 0.3s;
+        }
+
+        .nav-links a:hover {
+            color: var(--val-red);
+        }
+
+        /* Valorant Style Button */
+        .btn-val {
+            background: var(--val-red);
+            color: white;
+            padding: 12px 28px;
+            font-family: var(--font-head);
+            font-size: 18px;
+            font-weight: 700;
+            text-decoration: none;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            clip-path: polygon(12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%, 0 12px);
+            transition: all 0.3s ease;
+            border: none;
+            cursor: pointer;
+            box-shadow: 0 0 15px rgba(255, 70, 85, 0.4);
+        }
+
+        .btn-val:hover {
+            background: var(--val-red-hover);
+            transform: translateY(-2px);
+            box-shadow: 0 0 25px rgba(255, 70, 85, 0.7);
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            box-shadow: none;
+        }
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.1);
+            box-shadow: 0 0 15px rgba(255, 255, 255, 0.1);
+        }
+
+        /* Hero Section */
+        .hero {
+            padding: 80px 8% 100px;
+            max-width: 1400px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 60px;
+            align-items: center;
+        }
+
+        .hero-text h1 {
+            font-family: var(--font-head);
+            font-size: 64px;
+            line-height: 1.05;
+            text-transform: uppercase;
+            margin-bottom: 20px;
+            background: linear-gradient(180deg, #FFFFFF 0%, #A5B4FC 100%);
+            background-clip: text;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .hero-text h1 span {
+            color: var(--val-red);
+            -webkit-text-fill-color: var(--val-red);
+        }
+
+        .hero-text p {
+            color: var(--text-muted);
+            font-size: 18px;
+            line-height: 1.6;
+            margin-bottom: 35px;
+        }
+
+        .hero-buttons {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+
+        /* Tactical Card Preview (Mockup) */
+        .hero-preview {
+            position: relative;
+        }
+
+        .preview-card {
+            background: var(--bg-card);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--bg-card-border);
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+            position: relative;
+        }
+
+        .preview-header {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+            padding-bottom: 15px;
+            margin-bottom: 20px;
+        }
+
+        .avatar {
+            width: 50px;
+            height: 50px;
+            border-radius: 8px;
+            background: linear-gradient(45deg, var(--val-red), var(--val-purple));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+        }
+
+        .user-info h4 { font-size: 18px; font-weight: 700; }
+        .user-info p { font-size: 13px; color: var(--val-cyan); font-weight: 600; }
+
+        .stat-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+        }
+
+        .stat-box {
+            background: rgba(0,0,0,0.3);
+            padding: 12px;
+            border-radius: 6px;
+            text-align: center;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .stat-box .title { font-size: 11px; color: var(--text-muted); text-transform: uppercase; }
+        .stat-box .value { font-size: 20px; font-weight: 800; font-family: var(--font-head); color: #fff; margin-top: 4px; }
+        .stat-box .value.highlight { color: var(--val-red); }
+
+        /* Feature Section (Z-Pattern) */
+        .features-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 60px 8%;
+        }
+
+        .feature-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 60px;
+            align-items: center;
+            margin-bottom: 100px;
+        }
+
+        .feature-row.reverse {
+            direction: rtl;
+        }
+        .feature-row.reverse .feature-text {
+            direction: ltr;
+        }
+
+        .feature-text h2 {
+            font-family: var(--font-head);
+            font-size: 42px;
+            text-transform: uppercase;
+            margin-bottom: 15px;
+            color: #fff;
+        }
+
+        .feature-text p {
+            color: var(--text-muted);
+            font-size: 16px;
+            line-height: 1.7;
+            margin-bottom: 25px;
+        }
+
+        .feature-badge {
+            background: rgba(255, 70, 85, 0.1);
+            color: var(--val-red);
+            padding: 5px 12px;
+            font-size: 12px;
+            font-weight: 700;
+            border-left: 3px solid var(--val-red);
+            display: inline-block;
+            margin-bottom: 15px;
+            text-transform: uppercase;
+        }
+
+        /* Grid Features ("Ve Çok Daha Fazlası") */
+        .more-features {
+            text-align: center;
+            padding: 80px 8%;
+            max-width: 1300px;
+            margin: 0 auto;
+        }
+
+        .section-title {
+            font-family: var(--font-head);
+            font-size: 48px;
+            text-transform: uppercase;
+            margin-bottom: 10px;
+        }
+
+        .section-subtitle {
+            color: var(--text-muted);
+            margin-bottom: 50px;
+            font-size: 16px;
+        }
+
+        .grid-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 25px;
+        }
+
+        .grid-card {
+            background: var(--bg-card);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            padding: 30px;
+            border-radius: 8px;
+            text-align: left;
+            transition: 0.3s;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .grid-card:hover {
+            border-color: var(--val-red);
+            transform: translateY(-5px);
+        }
+
+        .grid-card i {
+            font-size: 32px;
+            color: var(--val-red);
+            margin-bottom: 20px;
+        }
+
+        .grid-card h3 {
+            font-size: 20px;
+            margin-bottom: 10px;
+            color: #fff;
+        }
+
+        .grid-card p {
+            color: var(--text-muted);
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        /* Bottom CTA */
+        .cta-box {
+            background: linear-gradient(135deg, rgba(255, 70, 85, 0.15) 0%, rgba(11, 14, 20, 0.9) 100%);
+            border: 1px solid var(--val-red);
+            max-width: 1000px;
+            margin: 80px auto;
+            padding: 60px 40px;
+            text-align: center;
+            border-radius: 12px;
+            box-shadow: 0 0 50px rgba(255, 70, 85, 0.2);
+        }
+
+        .cta-box h2 {
+            font-family: var(--font-head);
+            font-size: 46px;
+            text-transform: uppercase;
+            margin-bottom: 15px;
+        }
+
+        .cta-box p {
+            color: var(--text-muted);
+            margin-bottom: 30px;
+            font-size: 18px;
+        }
+
+        /* Footer */
+        footer {
+            border-top: 1px solid rgba(255,255,255,0.08);
+            padding: 30px 8%;
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 14px;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 900px) {
+            .hero, .feature-row {
+                grid-template-columns: 1fr;
+                text-align: center;
+            }
+            .feature-row.reverse { direction: ltr; }
+            .hero-buttons { justify-content: center; }
+            .nav-links { display: none; }
+            .hero-text h1 { font-size: 42px; }
+        }
     </style>
 </head>
 <body>
-    <h1>V-Tracker.gg Bot</h1>
-    <p>Sunucunuz için en gelişmiş Valorant istatistik ve takip botu.</p>
-    <p>Özellikler: Anlık İstatistikler, Maç Geçmişi, Liderlik Tablosu ve Daha Fazlası!</p>
-    
-    <!-- Botun Discord Davet Linkini Buraya Ekleyebilirsin -->
-    <a href="BURAYA_DISCORD_DAVET_LINKINI_YAZ" class="btn" target="_blank">Botu Sunucuya Ekle</a>
+
+    <!-- Üst Duyuru Çubuğu -->
+    <div class="top-bar">
+        <span>YENİ SÜRÜM</span> V-Tracker v2.0 Güncellemesi Yayında! AI Taktik Koçu ve Dereceli İstatistikler Eklendi.
+    </div>
+
+    <!-- Navigasyon -->
+    <nav>
+        <div class="logo">
+            <i class="fa-solid fa-crosshair"></i> V-Tracker.gg
+        </div>
+        <ul class="nav-links">
+            <li><a href="#ozellikler">Özellikler</a></li>
+            <li><a href="#komutlar">Komutlar</a></li>
+            <li><a href="#destek">Topluluk</a></li>
+        </ul>
+        <a href="BURAYA_DISCORD_DAVET_LINKINI_YAZ" class="btn-val" target="_blank">
+            <i class="fa-brands fa-discord"></i> Botu Ekle
+        </a>
+    </nav>
+
+    <!-- Hero Alanı -->
+    <section class="hero">
+        <div class="hero-text">
+            <h1>RADARINIZDAKİ EN GÜÇLÜ <span>VALORANT</span> ASİSTANI</h1>
+            <p>Sunucunuz için geliştirilmiş yapay zeka destekli performans analizi, anlık dereceli takibi, maç geçmişi ve liderlik tabloları tek bir Discord botunda.</p>
+            <div class="hero-buttons">
+                <a href="BURAYA_DISCORD_DAVET_LINKINI_YAZ" class="btn-val" target="_blank">
+                    <i class="fa-brands fa-discord"></i> Discord'a Ekle
+                </a>
+                <a href="#ozellikler" class="btn-val btn-secondary">
+                    <i class="fa-solid fa-bolt"></i> Keşfet
+                </a>
+            </div>
+        </div>
+
+        <!-- Canlı Simülasyon Kartı -->
+        <div class="hero-preview">
+            <div class="preview-card">
+                <div class="preview-header">
+                    <div class="avatar"><i class="fa-solid fa-shield-halved"></i></div>
+                    <div class="user-info">
+                        <h4>Ajan Profil Kartı</h4>
+                        <p><i class="fa-solid fa-circle" style="color:#00f0ff; font-size:8px;"></i> IMMORTAL 3 • 412 RR</p>
+                    </div>
+                </div>
+                <div class="stat-grid">
+                    <div class="stat-box">
+                        <div class="title">KDA Oranı</div>
+                        <div class="value highlight">1.48</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="title">Kafa Vuruşu</div>
+                        <div class="value">34.2%</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="title">Kazanma</div>
+                        <div class="value">62%</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Özellikler (Z-Pattern Layout) -->
+    <section class="features-container" id="ozellikler">
+        
+        <!-- Özellik 1 -->
+        <div class="feature-row">
+            <div class="feature-text">
+                <div class="feature-badge">ANLIK PERFORMANS KONTROLÜ</div>
+                <h2>Detaylı İstatistik Ve Maç Analizi</h2>
+                <p>Oynadığınız son maçların KDA verilerini, kafa vuruşu yüzdelerini ve kazanma oranlarını tek bir komutla Discord kanalınızda grafiksel olarak sergileyin.</p>
+                <a href="BURAYA_DISCORD_DAVET_LINKINI_YAZ" class="btn-val btn-secondary" target="_blank">
+                    <i class="fa-solid fa-terminal"></i> /stats Komutunu Dene
+                </a>
+            </div>
+            <div class="preview-card">
+                <div class="preview-header">
+                    <i class="fa-solid fa-chart-line" style="color:var(--val-red); font-size: 24px;"></i>
+                    <div class="user-info">
+                        <h4>Son Maç Özeti (/lastmatch)</h4>
+                        <p>Lotus • Zafer (13 - 9)</p>
+                    </div>
+                </div>
+                <div class="stat-grid">
+                    <div class="stat-box"><div class="title">Skor</div><div class="value">24 / 12 / 6</div></div>
+                    <div class="stat-box"><div class="title">ACS</div><div class="value highlight">312</div></div>
+                    <div class="stat-box"><div class="title">Eski Kademe</div><div class="value">+24 RR</div></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Özellik 2 -->
+        <div class="feature-row reverse">
+            <div class="feature-text">
+                <div class="feature-badge">YAPAY ZEKA DESTEKLİ</div>
+                <h2>Taktiksel Yapay Zeka Koçu</h2>
+                <p>Maç içi zayıf yönlerinizi analiz eden akıllı algoritma ile kafa vuruşu yüzdenizi artırmak ve ajan seçimlerinizi optimize etmek için kişisel tavsiyeler alın.</p>
+                <a href="BURAYA_DISCORD_DAVET_LINKINI_YAZ" class="btn-val btn-secondary" target="_blank">
+                    <i class="fa-solid fa-robot"></i> /coach Komutunu Dene
+                </a>
+            </div>
+            <div class="preview-card">
+                <div class="preview-header">
+                    <i class="fa-solid fa-brain" style="color:var(--val-cyan); font-size: 24px;"></i>
+                    <div class="user-info">
+                        <h4>Taktik Analizi</h4>
+                        <p>Omen / Jett Main Rehberi</p>
+                    </div>
+                </div>
+                <p style="font-size:13px; color:var(--text-muted); line-height:1.5;">
+                    "Son 5 maçtaki ilk kan alma yüzdeniz %68. Harita kontrolünü elinizde tutmak için A-Main bölgelerinde smoke kombinasyonlarını artırın."
+                </p>
+            </div>
+        </div>
+
+    </section>
+
+    <!-- Grid Kartlar (Ve Çok Daha Fazlası...) -->
+    <section class="more-features" id="komutlar">
+        <h2 class="section-title">VE ÇOK DAHA FAZLASI...</h2>
+        <p class="section-subtitle">Sunucunuzdaki rekabeti kızıştıracak gelişmiş komut altyapısı.</p>
+
+        <div class="grid-cards">
+            <div class="grid-card">
+                <i class="fa-solid fa-trophy"></i>
+                <h3>Sunucu Liderlik Tablosu</h3>
+                <p>Sunucudaki tüm oyuncuların Valorant kademelerini otomatik sıralayan /leaderboard paneli.</p>
+            </div>
+            <div class="grid-card">
+                <i class="fa-solid fa-user-ninja"></i>
+                <h3>Hızlı Profil Kaydı</h3>
+                <p>Riot ID ve Etiketinizi sisteme bir kez kaydedin, tüm istatistiklerinize tek tıkla erişin.</p>
+            </div>
+            <div class="grid-card">
+                <i class="fa-solid fa-scale-balanced"></i>
+                <h3>Oyuncu Karşılaştırma</h3>
+                <p>Arkadaşlarınızla KDA, kafa vuruşu ve zafer oranlarınızı yan yana kıyaslayın.</p>
+            </div>
+            <div class="grid-card">
+                <i class="fa-solid fa-shield-cat"></i>
+                <h3>Karşı Strateji Rehberi</h3>
+                <p>Rakip ajanlara karşı kullanabileceğiniz en etkili harita ve pozisyon tavsiyeleri.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Alt Çağrı Alanı (Bottom CTA) -->
+    <div class="cta-box">
+        <h2>AJANINI SEÇ, SUNUCUNU ÜST LİGE TAŞI!</h2>
+        <p>V-Tracker.gg botunu hemen Discord sunucuna ücretsiz ekle ve rekabete başla.</p>
+        <a href="BURAYA_DISCORD_DAVET_LINKINI_YAZ" class="btn-val" target="_blank">
+            <i class="fa-brands fa-discord"></i> Botu Sunucuna Ekle
+        </a>
+    </div>
+
+    <!-- Footer -->
+    <footer>
+        <p>© 2026 V-Tracker.gg — Valorant & Discord Toplulukları İçin Özel Olarak Geliştirildi. Tüm Hakları Saklıdır.</p>
+    </footer>
+
 </body>
 </html>
