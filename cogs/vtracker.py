@@ -153,7 +153,8 @@ class StatsEngine:
             if not isinstance(match, dict):
                 continue
             
-            map_name = match.get("metadata", {}).get("map", "Bilinmiyor")
+            metadata = match.get("metadata", {})
+            map_name = metadata.get("map", "Bilinmiyor")
             if map_name not in data["maps"]:
                 data["maps"][map_name] = {"played": 0, "won": 0}
             data["maps"][map_name]["played"] += 1
@@ -180,22 +181,40 @@ class StatsEngine:
                 data["deaths"] += stats.get("deaths", 0)
                 data["assists"] += stats.get("assists", 0)
                 data["score_sum"] += stats.get("score", 0)
-                
-                rounds_played = match.get("metadata", {}).get("rounds_played", 1)
-                if rounds_played < 1: rounds_played = 1
-                data["total_rounds"] += rounds_played
 
                 agent = player.get("character", "Bilinmiyor")
                 data["agents"][agent] = data["agents"].get(agent, 0) + 1
 
-                damage_made = player.get("damage_made", [])
-                if isinstance(damage_made, list):
-                    for dmg in damage_made:
-                        if isinstance(dmg, dict):
-                            data["headshots"] += dmg.get("headshots", 0)
-                            data["bodyshots"] += dmg.get("bodyshots", 0)
-                            data["legshots"] += dmg.get("legshots", 0)
-                            data["total_damage"] += dmg.get("damage", 0)
+            # Raund bazlı detaylı hasar ve vuruş analizi (HenrikDev v3)
+            rounds = match.get("rounds", [])
+            match_rounds_count = len(rounds)
+            if match_rounds_count > 0:
+                data["total_rounds"] += match_rounds_count
+                for rnd in rounds:
+                    if not isinstance(rnd, dict):
+                        continue
+                    player_stats = rnd.get("player_stats", [])
+                    if isinstance(player_stats, list):
+                        ps = next((p for p in player_stats if isinstance(p, dict) and (p.get("puuid") == puuid or p.get("player_puuid") == puuid)), None)
+                        if ps:
+                            dmg_events = ps.get("damage_events", [])
+                            round_dmg = 0
+                            if isinstance(dmg_events, list):
+                                for ev in dmg_events:
+                                    if isinstance(ev, dict):
+                                        data["headshots"] += ev.get("headshots", 0)
+                                        data["bodyshots"] += ev.get("bodyshots", 0)
+                                        data["legshots"] += ev.get("legshots", 0)
+                                        round_dmg += ev.get("damage", 0)
+                            if round_dmg == 0:
+                                round_dmg = ps.get("damage", 0)
+                            data["total_damage"] += round_dmg
+            else:
+                rounds_played_meta = metadata.get("rounds_played", 0)
+                if rounds_played_meta > 0:
+                    data["total_rounds"] += rounds_played_meta
+                else:
+                    data["total_rounds"] += 1
 
             kills_list = match.get("kills", [])
             if isinstance(kills_list, list):
@@ -279,7 +298,13 @@ class VTrackerSystem(commands.Cog):
 
             acc = acc_data["data"]
             GlobalDatabase.register_user(discord_id_input, acc.get("puuid"), acc.get("name"), acc.get("tag"), (acc.get("region") or "eu").lower())
-            await msg.edit(content=f"✅ Kayıt Başarılı! Artık `v!stats` komutunu kullanabilirsin.")
+            
+            success_embed = discord.Embed(
+                title="✅ Kayıt Başarılı",
+                description=f"Discord ID ( `{discord_id_input}` ) sisteme başarıyla kaydedildi.\n\n**Bağlanan Riot Hesabı**\n`{acc.get('name')}#{acc.get('tag')}`\n\nArtık v!stats komutunu sorunsuz kullanabilirsiniz.",
+                color=0x2ecc71
+            )
+            await msg.edit(content=None, embed=success_embed)
 
     @commands.command(name="stats", aliases=["istatistik", "profil"])
     async def stats_command(self, ctx, *, hedef: str = None):
