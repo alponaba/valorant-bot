@@ -5,6 +5,9 @@ import json
 import os
 import random
 
+# Kendi Discord ID'ni buraya yazmalısın (Sınırsız paraver yetkisi için)
+OWNER_ID = 000000000000000000  # Örn: 123456789012345678
+
 # ================= MINEFIELD (MAYIN TARLASI) VIEW =================
 class MinesView(discord.ui.View):
     def __init__(self, ctx, amount, cog):
@@ -14,23 +17,19 @@ class MinesView(discord.ui.View):
         self.cog = cog
         self.uid = str(ctx.author.id)
         
-        # 3x3 grid: 7 hazine, 2 mayın
         self.board = ["safe"] * 7 + ["bomb"] * 2
         random.shuffle(self.board)
         self.revealed = [False] * 9
         self.game_over = False
         self.safe_count = 0
         
-        # Kademeli çarpanlar (Her elmas buldukça artar)
         self.multipliers = [1.2, 1.4, 1.8, 2.3, 3.0, 4.5, 7.0]
 
-        # 9 adet kutu butonu (Satır 0, 1, 2)
         for i in range(9):
             btn = discord.ui.Button(style=discord.ButtonStyle.secondary, label="❓", row=i//3, custom_id=f"tile_{i}")
             btn.callback = self.make_callback(i)
             self.add_item(btn)
             
-        # Parayı Çek Butonu (Satır 3)
         self.cashout_btn = discord.ui.Button(style=discord.ButtonStyle.success, label="💰 Parayı Çek", row=3, disabled=True)
         self.cashout_btn.callback = self.cashout_callback
         self.add_item(self.cashout_btn)
@@ -75,7 +74,7 @@ class MinesView(discord.ui.View):
                 button.style = discord.ButtonStyle.success
                 button.label = "💎"
                 self.safe_count += 1
-                self.cashout_btn.disabled = False # Hazine bulduğu an para çekme açılır
+                self.cashout_btn.disabled = False
 
                 current_mult = self.multipliers[self.safe_count - 1]
                 potential_win = int(self.amount * current_mult)
@@ -98,7 +97,7 @@ class MinesView(discord.ui.View):
                 else:
                     embed = discord.Embed(
                         title="🧭 V-TRACKER | MAYIN TARLASI",
-                        description=f"💎 Harika! Hazineyi buldun.\n• Mevcut Çarpan: **{current_mult}x**\n• O anki Ödül: `{potential_win:,} V-Coin`\n• İstersen **Parayı Çek** butonuna basıp kazancını alabilirsin ya da devam edebilirsin!",
+                        description=f"💎 Harika! Hazineyi buldun.\n• Mevcut Çarpan: **{current_mult}x**\n• O anki Ödül: `{potential_win:,} V-Coin`\n• İstersen **Parayı Çek** butonuna basıp kazancını alabilirsin!",
                         color=discord.Color.blurple()
                     )
                     await interaction.response.edit_message(embed=embed, view=self)
@@ -146,7 +145,6 @@ class WheelView(discord.ui.View):
 
         button.disabled = True
 
-        # 8 Bölümlü Çark Dilimleri ve Şans Oranları (Ağırlıkları)
         sectors = [
             {"name": "0x (İflas)", "mult": 0.0, "weight": 20, "emoji": "💀"},
             {"name": "0.5x (Yarım Kayıp)", "mult": 0.5, "weight": 20, "emoji": "📉"},
@@ -190,7 +188,102 @@ class WheelView(discord.ui.View):
         )
         await interaction.response.edit_message(embed=embed, view=self)
 
-# ================= GAME SELECTOR VIEW =================
+# ================= YAZI TURA (COINFLIP) VIEW =================
+class CoinflipView(discord.ui.View):
+    def __init__(self, ctx, amount, cog):
+        super().__init__(timeout=60)
+        self.ctx = ctx
+        self.amount = amount
+        self.cog = cog
+        self.uid = str(ctx.author.id)
+
+    @discord.ui.button(label="Yazı 🪙", style=discord.ButtonStyle.primary)
+    async def yazi_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.play_coinflip(interaction, "Yazı")
+
+    @discord.ui.button(label="Tura 🦅", style=discord.ButtonStyle.secondary)
+    async def tura_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.play_coinflip(interaction, "Tura")
+
+    async def play_coinflip(self, interaction, choice):
+        if interaction.user.id != self.ctx.author.id:
+            return await interaction.response.send_message("❌ Bu senin oyunun değil!", ephemeral=True)
+
+        for child in self.children:
+            child.disabled = True
+
+        result = random.choice(["Yazı", "Tura"])
+        won = (choice == result)
+
+        if won:
+            change = self.amount
+            self.cog.update_user_balance(self.uid, change)
+            new_bal = self.cog.get_user_balance(self.uid)
+            embed = discord.Embed(
+                title="🪙 YAZI TURA | KAZANDIN!",
+                description=f"Seçimin: **{choice}** | Gelen: **{result}**\n• Kazanılan: **+{self.amount:,} V-Coin**\n• Güncel Bakiye: `{new_bal:,} V-Coin`",
+                color=discord.Color.green()
+            )
+        else:
+            change = -self.amount
+            self.cog.update_user_balance(self.uid, change)
+            new_bal = self.cog.get_user_balance(self.uid)
+            embed = discord.Embed(
+                title="🪙 YAZI TURA | KAYBETTİN!",
+                description=f"Seçimin: **{choice}** | Gelen: **{result}**\n• Kaybedilen: **-{self.amount:,} V-Coin**\n• Güncel Bakiye: `{new_bal:,} V-Coin`",
+                color=discord.Color.red()
+            )
+
+        await interaction.response.edit_message(embed=embed, view=self)
+
+# ================= ZAR DÜELLOSU (DICE) VIEW =================
+class DiceView(discord.ui.View):
+    def __init__(self, ctx, amount, cog):
+        super().__init__(timeout=60)
+        self.ctx = ctx
+        self.amount = amount
+        self.cog = cog
+        self.uid = str(ctx.author.id)
+
+    @discord.ui.button(label="🎲 Zar At!", style=discord.ButtonStyle.success)
+    async def roll_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.ctx.author.id:
+            return await interaction.response.send_message("❌ Bu senin oyunun değil!", ephemeral=True)
+
+        button.disabled = True
+
+        user_roll = random.randint(1, 6)
+        bot_roll = random.randint(1, 6)
+
+        if user_roll > bot_roll:
+            change = self.amount
+            self.cog.update_user_balance(self.uid, change)
+            new_bal = self.cog.get_user_balance(self.uid)
+            embed = discord.Embed(
+                title="🎲 ZAR DÜELLOSU | KAZANDIN!",
+                description=f"Senin Zarin: **{user_roll}** 🆚 Botun Zari: **{bot_roll}**\n• Kazanılan: **+{self.amount:,} V-Coin**\n• Güncel Bakiye: `{new_bal:,} V-Coin`",
+                color=discord.Color.green()
+            )
+        elif user_roll < bot_roll:
+            change = -self.amount
+            self.cog.update_user_balance(self.uid, change)
+            new_bal = self.cog.get_user_balance(self.uid)
+            embed = discord.Embed(
+                title="🎲 ZAR DÜELLOSU | KAYBETTİN!",
+                description=f"Senin Zarin: **{user_roll}** 🆚 Botun Zari: **{bot_roll}**\n• Kaybedilen: **-{self.amount:,} V-Coin**\n• Güncel Bakiye: `{new_bal:,} V-Coin`",
+                color=discord.Color.red()
+            )
+        else:
+            new_bal = self.cog.get_user_balance(self.uid)
+            embed = discord.Embed(
+                title="🎲 ZAR DÜELLOSU | BERABERE!",
+                description=f"Senin Zarin: **{user_roll}** 🆚 Botun Zari: **{bot_roll}**\n• Puan iade edildi (`0 V-Coin`).\n• Güncel Bakiye: `{new_bal:,} V-Coin`",
+                color=discord.Color.gold()
+            )
+
+        await interaction.response.edit_message(embed=embed, view=self)
+
+# ================= GAME SELECTOR VIEW (4 OYUN) =================
 class GameSelectView(discord.ui.View):
     def __init__(self, ctx, amount, cog):
         super().__init__(timeout=30)
@@ -198,11 +291,10 @@ class GameSelectView(discord.ui.View):
         self.amount = amount
         self.cog = cog
 
-    @discord.ui.button(label="Mayın Tarlası 💣", style=discord.ButtonStyle.danger)
+    @discord.ui.button(label="Mayın Tarlası 💣", style=discord.ButtonStyle.danger, row=0)
     async def mines_select(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != self.ctx.author.id:
             return await interaction.response.send_message("❌ Bu seçimi sen yapamazsın!", ephemeral=True)
-        
         view = MinesView(self.ctx, self.amount, self.cog)
         embed = discord.Embed(
             title="🧭 V-TRACKER | MAYIN TARLASI",
@@ -211,15 +303,38 @@ class GameSelectView(discord.ui.View):
         )
         await interaction.response.edit_message(embed=embed, view=view)
 
-    @discord.ui.button(label="Şans Çarkı 🎡", style=discord.ButtonStyle.success)
+    @discord.ui.button(label="Şans Çarkı 🎡", style=discord.ButtonStyle.success, row=0)
     async def wheel_select(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != self.ctx.author.id:
             return await interaction.response.send_message("❌ Bu seçimi sen yapamazsın!", ephemeral=True)
-        
         view = WheelView(self.ctx, self.amount, self.cog)
         embed = discord.Embed(
             title="🎡 V-TRACKER | ŞANS ÇARKI",
-            description=f"Çark çevrilmeye hazır!\n• Yatırılan: `{self.amount:,} V-Coin`\n• 8 farklı dilim seni bekliyor. Çarkı çevirmek için aşağıdaki butona tıkla!",
+            description=f"Çark çevrilmeye hazır!\n• Yatırılan: `{self.amount:,} V-Coin`\n• 8 farklı dilim seni bekliyor.",
+            color=discord.Color.blurple()
+        )
+        await interaction.response.edit_message(embed=embed, view=view)
+
+    @discord.ui.button(label="Yazı Tura 🪙", style=discord.ButtonStyle.primary, row=1)
+    async def coinflip_select(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.ctx.author.id:
+            return await interaction.response.send_message("❌ Bu seçimi sen yapamazsın!", ephemeral=True)
+        view = CoinflipView(self.ctx, self.amount, self.cog)
+        embed = discord.Embed(
+            title="🪙 V-TRACKER | YAZI TURA",
+            description=f"Yazı mı Tura mı? Aşağıdaki butonlardan birini seçerek bahsini başlat!\n• Yatırılan: `{self.amount:,} V-Coin`",
+            color=discord.Color.blurple()
+        )
+        await interaction.response.edit_message(embed=embed, view=view)
+
+    @discord.ui.button(label="Zar Düellosu 🎲", style=discord.ButtonStyle.secondary, row=1)
+    async def dice_select(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.ctx.author.id:
+            return await interaction.response.send_message("❌ Bu seçimi sen yapamazsın!", ephemeral=True)
+        view = DiceView(self.ctx, self.amount, self.cog)
+        embed = discord.Embed(
+            title="🎲 V-TRACKER | ZAR DÜELLOSU",
+            description=f"Bot ile zarlarınızı yarıştırın!\n• Yatırılan: `{self.amount:,} V-Coin`",
             color=discord.Color.blurple()
         )
         await interaction.response.edit_message(embed=embed, view=view)
@@ -266,7 +381,7 @@ class Bet(commands.Cog):
 
     @commands.command(name="bet", aliases=["kumar", "oyna", "bahis"])
     async def bet(self, ctx, amount: int = None):
-        """İnteraktif bahis oyunları menüsünü açar (Mayın Tarlası veya Çark)."""
+        """İnteraktif bahis oyunları menüsünü açar."""
         if amount is None:
             await ctx.send("❌ Lütfen yatırmak istediğin V-Coin miktarını yaz! Örnek: `v!bet 100`")
             return
@@ -289,6 +404,30 @@ class Bet(commands.Cog):
         )
         view = GameSelectView(ctx, amount, self)
         await ctx.send(embed=embed, view=view)
+
+    @commands.command(name="paraver", aliases=["give"])
+    async def paraver(self, ctx, member: discord.Member = None, amount: int = None):
+        """Kullanıcılara para verir. Normal kullanıcılara max 1M V-Coin sınırı vardır, sahibine yoktur."""
+        if member is None or amount is None:
+            return await ctx.send("❌ Hatalı kullanım! Örnek: `v!paraver @Kullanici 50000`")
+
+        # 1M V-Coin sınırı kontrolü (Sahip dışındakiler için)
+        if ctx.author.id != OWNER_ID:
+            if amount > 1000000:
+                return await ctx.send("❌ Normal kullanıcılar tek seferde en fazla **1,000,000 V-Coin** transfer edebilir!")
+
+        if amount <= 0:
+            return await ctx.send("❌ 0 veya daha düşük bir miktar veremezsin!")
+
+        target_id = str(member.id)
+        new_balance = self.update_user_balance(target_id, amount)
+
+        embed = discord.Embed(
+            title="💰 BAKİYE GÜNCELLENDİ",
+            description=f"{member.mention} adlı kullanıcıya **+{amount:,} V-Coin** eklendi!\n• Yeni Bakiye: `{new_balance:,} V-Coin`",
+            color=discord.Color.gold()
+        )
+        await ctx.send(embed=embed)
 
 async def setup(bot):
     await bot.add_cog(Bet(bot))
