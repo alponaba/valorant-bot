@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
+from flask import Flask, render_template
 import discord
 from discord.ext import commands
 import os
-from flask import Flask
 import threading
 
 # =====================================================================
@@ -12,7 +12,7 @@ app = Flask('')
 
 @app.route('/')
 def home():
-    return "V-Tracker.gg Bot Aktif ve 7/24 Çalışıyor!"
+  return render_template('index.html')
 
 def run_flask():
     app.run(host='0.0.0.0', port=8080)
