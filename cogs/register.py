@@ -12,7 +12,7 @@ import json
 import os
 import logging
 from datetime import datetime
-from typing import Dict, Any, Optional, Tuple
+from typing import Dict, Any, Optional
 
 # =====================================================================
 # 1. LOGLAMA YAPILANDIRMASI
@@ -26,7 +26,8 @@ if not logger.handlers:
     logger.addHandler(handler)
 
 GLOBAL_DB_FILE = "global_registered_users.json"
-FALLBACK_API_KEY = "HDEV-b0b6fb9c-f082-4311-a42c-59d1b958b0d6"
+# Güncel HenrikDev API Anahtarınız
+API_KEY = "HDEV-b0b6fb9c-f082-4311-a42c-59d1b958b0d6"
 
 # =====================================================================
 # 2. GLOBAL VERİTABANI YÖNETİCİSİ
@@ -61,7 +62,7 @@ class GlobalDatabase:
             "name": name,
             "tag": tag,
             "region": region,
-            "v_coins": db.get(discord_id, {}).get("v_coins", 0), # Mevcut bakiye sıfırlanmaz
+            "v_coins": db.get(discord_id, {}).get("v_coins", 0),
             "updated_at": datetime.utcnow().isoformat()
         }
         GlobalDatabase.save_db(db)
@@ -71,7 +72,7 @@ class GlobalDatabase:
         return GlobalDatabase.load_db().get(discord_id)
 
 # =====================================================================
-# 3. VALORANT API İSTEMCİSİ (SADECE HESAP DOĞRULAMA)
+# 3. VALORANT API İSTEMCİSİ
 # =====================================================================
 
 class ValorantAccountAPI:
@@ -80,8 +81,10 @@ class ValorantAccountAPI:
         self.primary_base = "https://api.henrikdev.xyz"
 
     def get_headers(self) -> Dict[str, str]:
-        key = getattr(self.bot, "henrik_api_key", FALLBACK_API_KEY)
-        return {"User-Agent": "V-Tracker-Bot/6.0", "Authorization": key}
+        return {
+            "User-Agent": "V-Tracker-Bot/6.0",
+            "Authorization": API_KEY
+        }
 
     async def fetch_account(self, session: aiohttp.ClientSession, name: str, tag: str) -> Dict[str, Any]:
         encoded_name = urllib.parse.quote(name, safe='')
@@ -120,10 +123,9 @@ class Register(commands.Cog):
     async def register_command(self, ctx, discord_id_input: str = None, *, riot_id: str = None):
         """
         Kullanım: v!register [Discord ID] [İsim#Tag]
-        Riot ismi ile tag arasında boşluk bırakılmamalıdır.
         """
         
-        # 1. Girdi Kontrolleri (Parametre eksikliği)
+        # 1. Girdi Kontrolleri
         if not discord_id_input or not riot_id:
             embed = discord.Embed(
                 title="❌ Hatalı Kullanım",
@@ -141,7 +143,7 @@ class Register(commands.Cog):
             )
             return await ctx.send(embed=embed)
 
-        # 3. Boşluk Kontrolü (Kullanıcı talebi: İsim ve tag arasında veya içinde boşluk olmamalı)
+        # 3. Boşluk Kontrolü
         if " " in riot_id:
             embed = discord.Embed(
                 title="❌ Boşluk Hatası",
@@ -159,31 +161,32 @@ class Register(commands.Cog):
             )
             return await ctx.send(embed=embed)
 
-        # Ayrıştırma İşlemi
         name, tag = riot_id.split("#", 1)
-        
         msg = await ctx.send(f"🔍 API üzerinden `{name}#{tag}` doğrulanıyor, lütfen bekleyin...")
 
-        # 5. API Üzerinden Doğrulama
+        # 5. API Doğrulaması
         async with aiohttp.ClientSession() as session:
             acc_data = await self.api_client.fetch_account(session, name, tag)
 
             if not acc_data["success"]:
-                return await msg.edit(content=f"❌ **{name}#{tag}** Riot sunucularında bulunamadı veya API geçici olarak yanıt vermiyor (Kod: {acc_data.get('status')}).")
+                status_code = acc_data.get('status')
+                err_msg = f"❌ **{name}#{tag}** doğrulanamadı. (API Hata Kodu: {status_code})"
+                if status_code == 401:
+                    err_msg += "\n⚠️ API anahtarı yetkisiz/geçersiz. Lütfen HenrikDev portalından anahtarın aktifliğini kontrol edin."
+                return await msg.edit(content=err_msg)
 
             fetched_puuid = acc_data["puuid"]
             fetched_name = acc_data["name"]
             fetched_tag = acc_data["tag"]
             fetched_region = acc_data["region"]
 
-            # 6. Veritabanı ve İsim Değişikliği (Name Change) Algaritması
+            # 6. Veritabanı ve İsim Değişikliği Kontrolü
             existing_user = GlobalDatabase.get_user(discord_id_input)
 
             if existing_user:
                 old_riot_id = f"{existing_user['name']}#{existing_user['tag']}"
                 new_riot_id = f"{fetched_name}#{fetched_tag}"
 
-                # Aynı PUUID ise ancak isim/tag farklıysa (Oyun içi isim değiştirilmiş demektir)
                 if existing_user["puuid"] == fetched_puuid:
                     if old_riot_id.lower() != new_riot_id.lower():
                         GlobalDatabase.register_user(discord_id_input, fetched_puuid, fetched_name, fetched_tag, fetched_region)
@@ -200,14 +203,12 @@ class Register(commands.Cog):
                         return await msg.edit(content=None, embed=embed_change)
                     else:
                         return await msg.edit(content=f"✅ Discord ID (`{discord_id_input}`) zaten `{new_riot_id}` olarak güncel şekilde sisteme kayıtlı.")
-                
-                # Farklı PUUID ise (Oyuncu Discord ID'sine tamamen başka bir Riot hesabı bağlıyor)
                 else:
                     GlobalDatabase.register_user(discord_id_input, fetched_puuid, fetched_name, fetched_tag, fetched_region)
                     
                     embed_new_acc = discord.Embed(
                         title="🔄 Bağlı Hesap Değiştirildi",
-                        description=f"Discord ID (`{discord_id_input}`) üzerindeki eski hesap veritabanından silindi.",
+                        description=f"Discord ID (`{discord_id_input}`) üzerindeki eski hesap güncellendi.",
                         color=discord.Color.blue()
                     )
                     embed_new_acc.add_field(name="Eski Hesap", value=f"`{old_riot_id}`", inline=True)
@@ -215,7 +216,6 @@ class Register(commands.Cog):
                     
                     return await msg.edit(content=None, embed=embed_new_acc)
 
-            # 7. Tamamen Yeni Kayıt İşlemi
             else:
                 GlobalDatabase.register_user(discord_id_input, fetched_puuid, fetched_name, fetched_tag, fetched_region)
                 
@@ -225,10 +225,9 @@ class Register(commands.Cog):
                     color=discord.Color.green()
                 )
                 embed_success.add_field(name="Bağlanan Riot Hesabı", value=f"`{fetched_name}#{fetched_tag}`", inline=False)
-                embed_success.set_footer(text="Artık v!stats komutunu sorunsuz kullanabilirsiniz.")
                 
                 return await msg.edit(content=None, embed=embed_success)
 
 async def setup(bot):
     await bot.add_cog(Register(bot))
-    logger.info("Register Modülü (İsim Değişikliği Algılayıcısı ile birlikte) yüklendi.")
+    logger.info("Register Modülü yüklendi.")
