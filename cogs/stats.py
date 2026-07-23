@@ -2,7 +2,7 @@
 """
 V-Tracker.gg - PUUID Odaklı Kesin Çözüm ve Kararlı İstatistik Modülü
 Modül: cogs.stats
-Sürüm: 4.7.0-PUUID-Final
+Sürüm: 4.7.1-PUUID-Final
 """
 
 import discord
@@ -31,16 +31,14 @@ if not logger.handlers:
     logger.addHandler(handler)
 
 DATA_FILE = "registered_users.json"
-FALLBACK_API_KEY = "HDEv-e534fbfe-c3c4-4f21-bccc-54eeeb39fd27"
+FALLBACK_API_KEY = "HDEV-b0b6fb9c-f082-4311-a42c-59d1b958b0d6"
 
 
 # =====================================================================
-# 2. VERİTABANI YÖNETİCİSİ
+# 2. VERİTABANI VE ÖNBELLEK YÖNETİCİSİ
 # =====================================================================
 
 class DatabaseManager:
-    """JSON tabanlı kullanıcı veritabanını yöneten sınıf."""
-    
     @staticmethod
     def load_users() -> Dict[str, Any]:
         if os.path.exists(DATA_FILE):
@@ -64,8 +62,6 @@ class DatabaseManager:
 
 
 class APICacheManager:
-    """API limitlerini aşmamak için bellek içi önbellek yöneticisi."""
-    
     def __init__(self, ttl_seconds: int = 300):
         self.cache: Dict[str, Tuple[datetime, Any]] = {}
         self.ttl = timedelta(seconds=ttl_seconds)
@@ -88,8 +84,6 @@ class APICacheManager:
 # =====================================================================
 
 class ValorantAPIClient:
-    """Riot API ile iletişim kuran ve PUUID tabanlı sorgulama yapan istemci."""
-    
     def __init__(self, bot_instance):
         self.bot = bot_instance
         self.primary_base = "https://api.henrikdev.xyz"
@@ -100,9 +94,10 @@ class ValorantAPIClient:
         return getattr(self.bot, "henrik_api_key", FALLBACK_API_KEY)
 
     def get_headers(self) -> Dict[str, str]:
-        headers = {"User-Agent": "V-Tracker-Bot/4.7.0"}
-        if self.api_key:
-            headers["Authorization"] = self.api_key
+        headers = {"User-Agent": "V-Tracker-Bot/4.7.1"}
+        key = self.api_key
+        if key:
+            headers["Authorization"] = key
         return headers
 
     async def _safe_get(self, session: aiohttp.ClientSession, url: str) -> Tuple[int, Optional[Dict[str, Any]]]:
@@ -114,7 +109,7 @@ class ValorantAPIClient:
                 text = await response.text()
                 
                 if status == 429:
-                    logger.warning("⚠️ Rate limit aşıldı, bekleniyor...")
+                    logger.warning("Rate limit aşıldı, bekleniyor...")
                     await asyncio.sleep(2.0)
                     return status, None
 
@@ -124,14 +119,13 @@ class ValorantAPIClient:
                     except json.JSONDecodeError:
                         return 500, None
                 else:
-                    logger.warning(f"⚠️ API Durum Kodu: {status} | Yanıt: {text[:200]}")
+                    logger.warning(f"API Durum Kodu: {status} | Yanıt: {text[:200]}")
                     return status, None
         except Exception as e:
             logger.error(f"API İstek Hatası: {e}")
             return 500, None
 
     async def get_account(self, session: aiohttp.ClientSession, name: str, tag: str) -> Dict[str, Any]:
-        """Özel karakterleri (Japonca, boşluk vb.) URL uyumlu hale getirip PUUID alır."""
         cache_key = f"account_{name}_{tag}".lower()
         cached = self.cache.get(cache_key)
         if cached:
@@ -161,7 +155,6 @@ class ValorantAPIClient:
         return {"puuid": None, "region": "eu", "account_level": 0, "card": {}, "name": name, "tag": tag, "success": False}
 
     async def get_mmr(self, session: aiohttp.ClientSession, region: str, puuid: str) -> Dict[str, Any]:
-        """Doğrudan PUUID kullanarak rank ve elo bilgilerini çeker."""
         cache_key = f"mmr_{region}_{puuid}".lower()
         cached = self.cache.get(cache_key)
         if cached:
@@ -185,7 +178,6 @@ class ValorantAPIClient:
         return {"tier": "Unranked", "rr": 0, "elo": 0, "region": region, "success": False}
 
     async def get_matches(self, session: aiohttp.ClientSession, region: str, puuid: str) -> Dict[str, Any]:
-        """Doğrudan PUUID kullanarak maç geçmişini çeker."""
         cache_key = f"matches_{region}_{puuid}".lower()
         cached = self.cache.get(cache_key)
         if cached:
@@ -212,12 +204,10 @@ class ValorantAPIClient:
 
 
 # =====================================================================
-# 4. İSTATİSTİK ANALİZ MOTORU (PUUID EŞLEŞMELİ)
+# 4. İSTATİSTİK ANALİZ MOTORU
 # =====================================================================
 
 class StatisticsAnalyzer:
-    """Maçlar içindeki oyuncuları kesin PUUID ile eşleştirerek istatistik çıkarır."""
-    
     @staticmethod
     def analyze_player(matches: List[Dict[str, Any]], puuid: str) -> Dict[str, Any]:
         agents_played = []
@@ -232,7 +222,6 @@ class StatisticsAnalyzer:
             players_list = players_section.get("all_players", [])
             
             for p in players_list:
-                # Sadece PUUID eşleşmesine bakar, isim hatalarını ve 0 0 0 sorununu bitirir
                 if p.get("puuid") == puuid:
                     agents_played.append(p.get("character", "Bilinmiyor"))
                     stats = p.get("stats", {})
@@ -265,12 +254,10 @@ class StatisticsAnalyzer:
 
 
 # =====================================================================
-# 5. ETKİLEŞİMLİ DİSCORD ARAYÜZ (VIEWS)
+# 5. ETKİLEŞİMLİ ARAYÜZ (VIEWS)
 # =====================================================================
 
 class ProfilePagingView(discord.ui.View):
-    """Sayfalar arası geçiş butonlarını yönetir."""
-    
     def __init__(self, ctx, embed_pages: List[discord.Embed]):
         super().__init__(timeout=120)
         self.ctx = ctx
@@ -285,7 +272,7 @@ class ProfilePagingView(discord.ui.View):
     @discord.ui.button(label="◀ Önceki", style=discord.ButtonStyle.blurple)
     async def prev_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != self.ctx.author.id:
-            await interaction.response.send_message("❌ Bu menüyü yalnızca komutu kullanan kişi kontrol edebilir.", ephemeral=True)
+            await interaction.response.send_message("Sadece komutu kullanan kişi değiştirebilir.", ephemeral=True)
             return
         if self.current_page > 0:
             self.current_page -= 1
@@ -295,7 +282,7 @@ class ProfilePagingView(discord.ui.View):
     @discord.ui.button(label="Sonraki ▶", style=discord.ButtonStyle.blurple)
     async def next_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != self.ctx.author.id:
-            await interaction.response.send_message("❌ Bu menüyü yalnızca komutu kullanan kişi kontrol edebilir.", ephemeral=True)
+            await interaction.response.send_message("Sadece komutu kullanan kişi değiştirebilir.", ephemeral=True)
             return
         if self.current_page < len(self.pages) - 1:
             self.current_page += 1
@@ -304,12 +291,10 @@ class ProfilePagingView(discord.ui.View):
 
 
 # =====================================================================
-# 6. ANA COG (STATS COMMAND MODULE)
+# 6. ANA COG
 # =====================================================================
 
 class Stats(commands.Cog):
-    """Valorant Oyuncu İstatistikleri ve PUUID Profili Modülü."""
-    
     def __init__(self, bot):
         self.bot = bot
         self.api_client = ValorantAPIClient(bot)
@@ -317,9 +302,8 @@ class Stats(commands.Cog):
 
     @commands.command(name="stats", aliases=["istatistik", "stat"])
     async def stats(self, ctx, *, target_user: Optional[str] = None):
-        """Oyuncunun Valorant istatistiklerini PUUID ile kesin olarak getirir."""
         if not target_user or "#" not in target_user:
-            await ctx.send("❌ Eksik veya hatalı format! Örnek kullanım: `v!stats İsim#Tag`")
+            await ctx.send("Lütfen geçerli bir Riot ID girin! Örnek: `v!stats İsim#Tag`")
             return
 
         name_part, tag_part = target_user.split("#", 1)
@@ -327,17 +311,16 @@ class Stats(commands.Cog):
         tag = tag_part.strip().split()[0][:6]
 
         loading_embed = discord.Embed(
-            title="🔍 Riot Sunucularından PUUID Alınıyor...",
-            description=f"**{name}#{tag}** sorgulanıyor, lütfen bekleyin...",
+            title="PUUID ve Hesap Bilgileri Çekiliyor...",
+            description=f"**{name}#{tag}** için Riot sunucularına bağlanılıyor...",
             color=self.embed_color
         )
         loading_msg = await ctx.send(embed=loading_embed)
 
         async with aiohttp.ClientSession() as session:
-            # 1. Adım: Hesap bilgilerini ve PUUID'yi al
             account_res = await self.api_client.get_account(session, name, tag)
             if not account_res.get("success") or not account_res.get("puuid"):
-                await loading_msg.edit(content=f"❌ **{name}#{tag}** bulunamadı veya Riot API yanıt vermedi.")
+                await loading_msg.edit(content=f"**{name}#{tag}** adında bir oyuncu bulunamadı veya API anahtarı bekleniyor.")
                 return
 
             puuid = account_res["puuid"]
@@ -347,24 +330,20 @@ class Stats(commands.Cog):
             real_name = account_res["name"]
             real_tag = account_res["tag"]
 
-            # 2. Adım: Doğrudan PUUID ile MMR (Rank) Çek
             mmr_res = await self.api_client.get_mmr(session, region, puuid)
             tier = mmr_res.get("tier", "Unranked")
             rr = mmr_res.get("rr", 0)
             elo = mmr_res.get("elo", 0)
 
-            # 3. Adım: Doğrudan PUUID ile Maç Geçmişi Çek
             match_res = await self.api_client.get_matches(session, region, puuid)
             matches = match_res.get("matches", [])
 
-        # 4. Adım: PUUID filtreli istatistik analizi
         metrics = StatisticsAnalyzer.analyze_player(matches, puuid)
         v_coins = DatabaseManager.get_user_balance(str(ctx.author.id))
 
-        # Arayüz Sayfa 1
         page_one = discord.Embed(
-            title=f"👤 OYUNCU PROFİLİ | {real_name}#{real_tag}",
-            description=f"🌍 **Bölge:** `{region.upper()}` | 🎖️ **Seviye:** `{account_level}`",
+            title=f"OYUNCU PROFİLİ | {real_name}#{real_tag}",
+            description=f"**PUUID:** `{puuid[:12]}...`\n**Bölge:** `{region.upper()}` | **Seviye:** `{account_level}`",
             color=self.embed_color,
             timestamp=datetime.utcnow()
         )
@@ -375,35 +354,31 @@ class Stats(commands.Cog):
             page_one.set_image(url=card_info.get("large"))
 
         page_one.add_field(
-            name="🏆 Rekabetçi Bilgileri",
-            value=f"• **Güncel Rank:** `{tier}`\n• **Kadem Puanı (RR):** `{rr} RR`\n• **ELO Puanı:** `{elo}`",
+            name="Rekabetçi Bilgileri",
+            value=f"• **Güncel Rank:** `{tier}`\n• **Kadem Puanı (RR):** `{rr} RR`\n• **ELO:** `{elo}`",
             inline=False
         )
 
         page_one.add_field(
-            name="📊 Son Maç Performans Özeti",
+            name="Son Maç Performans Özeti",
             value=(
                 f"• **İncelenen Maç Sayısı:** `{metrics['matches_analyzed']}`\n"
                 f"• **En Çok Oynanan Ajan:** `{metrics['main_agent']}`\n"
-                f"• **Ortalama K/D Oranı:** `{metrics['avg_kd']}`\n"
-                f"• **Maç Başı K / D / A:** `{metrics['avg_kills']} / {metrics['avg_deaths']} / {metrics['avg_assists']}`\n"
-                f"• **Maç Başı Skor:** `{metrics['avg_score']}`"
+                f"• **Ortalama K/D:** `{metrics['avg_kd']}`\n"
+                f"• **Ortalama K / D / A:** `{metrics['avg_kills']} / {metrics['avg_deaths']} / {metrics['avg_assists']}`\n"
+                f"• **Ortalama Skor:** `{metrics['avg_score']}`"
             ),
             inline=False
         )
 
         if v_coins > 0:
-            page_one.add_field(name="🪙 Cüzdan Bakiyesi", value=f"• **V-Coin:** `{v_coins}`", inline=False)
+            page_one.add_field(name="Cüzdan Bakiyesi", value=f"• **V-Coin:** `{v_coins}`", inline=False)
 
-        page_one.set_footer(
-            text=f"V-Tracker.gg • PUUID Altyapısı • İsteyen: {ctx.author}",
-            icon_url=ctx.author.display_avatar.url
-        )
+        page_one.set_footer(text=f"V-Tracker.gg • PUUID Tabanlı Kesin Sistem • {ctx.author}", icon_url=ctx.author.display_avatar.url)
 
-        # Arayüz Sayfa 2
         page_two = discord.Embed(
-            title=f"📈 DETAYLI SAVAŞ ANALİZİ | {real_name}#{real_tag}",
-            description=f"Son `{metrics['matches_analyzed']}` karşılaşmanın döküm raporu:",
+            title=f"DETAYLI SAVAŞ ANALİZİ | {real_name}#{real_tag}",
+            description=f"Son `{metrics['matches_analyzed']}` maçın PUUID tabanlı dökümü:",
             color=self.embed_color,
             timestamp=datetime.utcnow()
         )
@@ -411,12 +386,12 @@ class Stats(commands.Cog):
             page_two.set_thumbnail(url=card_info.get("small"))
 
         page_two.add_field(
-            name="⚔️ Toplam Çatışma Verileri",
+            name="Toplam Çatışma Verileri",
             value=(
-                f"• **Toplam Alınan Skor (Kill):** `{metrics['total_kills']}`\n"
-                f"• **Toplam Ölüm (Death):** `{metrics['total_deaths']}`\n"
+                f"• **Toplam Kill:** `{metrics['total_kills']}`\n"
+                f"• **Toplam Death:** `{metrics['total_deaths']}`\n"
                 f"• **Toplam Asist:** `{metrics['total_assists']}`\n"
-                f"• **Genel Başarı Oranı:** `{(metrics['total_kills'] / max(1, metrics['total_deaths'])):.2f} K/D`"
+                f"• **Genel K/D:** `{(metrics['total_kills'] / max(1, metrics['total_deaths'])):.2f}`"
             ),
             inline=False
         )
@@ -433,4 +408,4 @@ class Stats(commands.Cog):
 
 async def setup(bot):
     await bot.add_cog(Stats(bot))
-    logger.info("Stats Cog (PUUID Tabanlı Sürüm) başarıyla yüklendi.")
+    logger.info("Stats Cog (PUUID Kesin Sürüm) yüklendi.")
