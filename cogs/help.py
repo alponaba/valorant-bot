@@ -155,12 +155,13 @@ class HelpCog(commands.Cog):
             "faq": embed_faq
         }
 
-    @commands.command(name="vhelp", aliases=["help", "yardim", "komutlar"])
-    async def vhelp(self, ctx):
+    @commands.command(name="help", aliases=["vhelp", "yardim", "komutlar"])
+    async def help(self, ctx):
         embeds = self.create_embeds(ctx)
         view = HelpView(embeds)
         await ctx.send(embed=embeds["general"], view=view)
 
 async def setup(bot):
+    bot.remove_command('help')
     await bot.add_cog(HelpCog(bot))
     logger.info("HelpCog başarıyla yüklendi.")
