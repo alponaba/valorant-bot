@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """
-V-Tracker.gg - PUUID Odaklı Kesin Çözüm ve Kararlı İstatistik Modülü
+V-Tracker.gg - Global Database, Kayıt ve PUUID İstatistik Modülü
 Modül: cogs.stats
-Sürüm: 4.7.1-PUUID-Final
+Sürüm: 5.1.0-Global
 """
 
 import discord
@@ -13,195 +13,135 @@ import json
 import os
 import logging
 import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime
 from collections import Counter
 from typing import Dict, Any, Optional, List, Tuple
 
 # =====================================================================
-# 1. LOGLAMA VE SİSTEM YAPILANDIRMASI
+# 1. LOGLAMA
 # =====================================================================
 
-logger = logging.getLogger("VTracker.StatsEngine")
+logger = logging.getLogger("VTracker.System")
 logger.setLevel(logging.INFO)
-
 if not logger.handlers:
     handler = logging.StreamHandler()
-    formatter = logging.Formatter("[%(asctime)s] [%(levelname)s] [%(name)s]: %(message)s")
-    handler.setFormatter(formatter)
+    handler.setFormatter(logging.Formatter("[%(asctime)s] [%(levelname)s]: %(message)s"))
     logger.addHandler(handler)
 
-DATA_FILE = "registered_users.json"
+GLOBAL_DB_FILE = "global_registered_users.json"
 FALLBACK_API_KEY = "HDEV-b0b6fb9c-f082-4311-a42c-59d1b958b0d6"
 
-
 # =====================================================================
-# 2. VERİTABANI VE ÖNBELLEK YÖNETİCİSİ
+# 2. KÜRESEL VERİTABANI YÖNETİCİSİ (DISCORD ID -> PUUID)
 # =====================================================================
 
-class DatabaseManager:
+class GlobalDatabase:
     @staticmethod
-    def load_users() -> Dict[str, Any]:
-        if os.path.exists(DATA_FILE):
+    def load_db() -> Dict[str, Any]:
+        if os.path.exists(GLOBAL_DB_FILE):
             try:
-                with open(DATA_FILE, "r", encoding="utf-8") as f:
+                with open(GLOBAL_DB_FILE, "r", encoding="utf-8") as f:
                     content = f.read().strip()
-                    if not content:
-                        return {}
-                    return json.loads(content)
+                    return json.loads(content) if content else {}
             except Exception:
                 return {}
         return {}
 
     @staticmethod
-    def get_user_balance(discord_id: str) -> int:
-        db = DatabaseManager.load_users()
-        user_data = db.get(str(discord_id))
-        if user_data and isinstance(user_data, dict):
-            return user_data.get("v_coins", 0)
-        return 0
+    def save_db(data: Dict[str, Any]) -> None:
+        with open(GLOBAL_DB_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=4)
 
+    @staticmethod
+    def register_user(discord_id: int, puuid: str, name: str, tag: str, region: str) -> None:
+        db = GlobalDatabase.load_db()
+        db[str(discord_id)] = {
+            "puuid": puuid,
+            "name": name,
+            "tag": tag,
+            "region": region,
+            "v_coins": db.get(str(discord_id), {}).get("v_coins", 0),
+            "updated_at": datetime.utcnow().isoformat()
+        }
+        GlobalDatabase.save_db(db)
 
-class APICacheManager:
-    def __init__(self, ttl_seconds: int = 300):
-        self.cache: Dict[str, Tuple[datetime, Any]] = {}
-        self.ttl = timedelta(seconds=ttl_seconds)
+    @staticmethod
+    def get_user(discord_id: int) -> Optional[Dict[str, Any]]:
+        return GlobalDatabase.load_db().get(str(discord_id))
 
-    def get(self, key: str) -> Optional[Any]:
-        if key in self.cache:
-            timestamp, data = self.cache[key]
-            if datetime.now() - timestamp < self.ttl:
-                return data
-            else:
-                del self.cache[key]
-        return None
-
-    def set(self, key: str, data: Any) -> None:
-        self.cache[key] = (datetime.now(), data)
-
+    @staticmethod
+    def get_all_users() -> Dict[str, Any]:
+        return GlobalDatabase.load_db()
 
 # =====================================================================
-# 3. VALORANT API İSTEMCİSİ (PUUID TABANLI KESİN ÇÖZÜM)
+# 3. VALORANT API İSTEMCİSİ (GÜNCELLENMİŞ ROTLAR)
 # =====================================================================
 
 class ValorantAPIClient:
     def __init__(self, bot_instance):
         self.bot = bot_instance
         self.primary_base = "https://api.henrikdev.xyz"
-        self.cache = APICacheManager(ttl_seconds=300)
-
-    @property
-    def api_key(self) -> str:
-        return getattr(self.bot, "henrik_api_key", FALLBACK_API_KEY)
 
     def get_headers(self) -> Dict[str, str]:
-        headers = {"User-Agent": "V-Tracker-Bot/4.7.1"}
-        key = self.api_key
-        if key:
-            headers["Authorization"] = key
-        return headers
+        key = getattr(self.bot, "henrik_api_key", FALLBACK_API_KEY)
+        return {"User-Agent": "V-Tracker-Bot/5.1", "Authorization": key}
 
     async def _safe_get(self, session: aiohttp.ClientSession, url: str) -> Tuple[int, Optional[Dict[str, Any]]]:
-        headers = self.get_headers()
-        logger.info(f"API İstek Gönderiliyor -> URL: {url}")
         try:
-            async with session.get(url, headers=headers, timeout=10) as response:
+            async with session.get(url, headers=self.get_headers(), timeout=12) as response:
                 status = response.status
-                text = await response.text()
-                
-                if status == 429:
-                    logger.warning("Rate limit aşıldı, bekleniyor...")
-                    await asyncio.sleep(2.0)
-                    return status, None
-
                 if status == 200:
-                    try:
-                        return status, json.loads(text)
-                    except json.JSONDecodeError:
-                        return 500, None
-                else:
-                    logger.warning(f"API Durum Kodu: {status} | Yanıt: {text[:200]}")
-                    return status, None
+                    return status, await response.json()
+                logger.warning(f"API Hata Kodu: {status} | URL: {url}")
+                return status, None
         except Exception as e:
             logger.error(f"API İstek Hatası: {e}")
             return 500, None
 
-    async def get_account(self, session: aiohttp.ClientSession, name: str, tag: str) -> Dict[str, Any]:
-        cache_key = f"account_{name}_{tag}".lower()
-        cached = self.cache.get(cache_key)
-        if cached:
-            return cached
-
+    async def get_account_by_name(self, session: aiohttp.ClientSession, name: str, tag: str) -> Dict[str, Any]:
+        # 404 hatasını çözen düzeltilmiş endpoint: riot/v1 yerine valorant/v1
         encoded_name = urllib.parse.quote(name, safe='')
         encoded_tag = urllib.parse.quote(tag, safe='')
+        url = f"{self.primary_base}/valorant/v1/account/{encoded_name}/{encoded_tag}"
         
-        url = f"{self.primary_base}/riot/v1/account/{encoded_name}/{encoded_tag}"
         status, data = await self._safe_get(session, url)
-        
+        if status == 200 and data and data.get("data"):
+            acc = data["data"]
+            return {
+                "puuid": acc.get("puuid"),
+                "region": (acc.get("region") or "eu").lower(),
+                "account_level": acc.get("account_level", 0),
+                "card": acc.get("card", {}),
+                "name": acc.get("name", name),
+                "tag": acc.get("tag", tag),
+                "success": True
+            }
+        return {"success": False}
+
+    async def get_mmr_by_puuid(self, session: aiohttp.ClientSession, region: str, puuid: str) -> Dict[str, Any]:
+        # val/v2 yerine valorant/v2
+        url = f"{self.primary_base}/valorant/v2/by-puuid/mmr/{region}/{puuid}"
+        status, data = await self._safe_get(session, url)
+        if status == 200 and data and data.get("data"):
+            d = data["data"]
+            current = d.get("current_data", {})
+            return {
+                "tier": current.get("currenttierpatched") or "Unranked",
+                "rr": current.get("ranking_in_tier", 0),
+                "elo": current.get("elo", 0),
+                "success": True
+            }
+        return {"tier": "Unranked", "rr": 0, "elo": 0, "success": False}
+
+    async def get_matches_by_puuid(self, session: aiohttp.ClientSession, region: str, puuid: str) -> List[Dict[str, Any]]:
+        # val/v3 yerine valorant/v3
+        url = f"{self.primary_base}/valorant/v3/by-puuid/matches/{region}/{puuid}"
+        status, data = await self._safe_get(session, url)
         if status == 200 and data:
-            acc_data = data.get("data", {})
-            if acc_data and acc_data.get("puuid"):
-                result = {
-                    "puuid": acc_data.get("puuid"),
-                    "region": (acc_data.get("region") or "eu").lower(),
-                    "account_level": acc_data.get("account_level", 0),
-                    "card": acc_data.get("card", {}),
-                    "name": acc_data.get("name", name),
-                    "tag": acc_data.get("tag", tag),
-                    "success": True
-                }
-                self.cache.set(cache_key, result)
-                return result
-
-        return {"puuid": None, "region": "eu", "account_level": 0, "card": {}, "name": name, "tag": tag, "success": False}
-
-    async def get_mmr(self, session: aiohttp.ClientSession, region: str, puuid: str) -> Dict[str, Any]:
-        cache_key = f"mmr_{region}_{puuid}".lower()
-        cached = self.cache.get(cache_key)
-        if cached:
-            return cached
-
-        target_regions = list(dict.fromkeys([region, "tr", "eu"]))
-        for reg in target_regions:
-            url = f"{self.primary_base}/val/v2/by-puuid/mmr/{reg}/{puuid}"
-            status, data = await self._safe_get(session, url)
-            if status == 200 and data:
-                d = data.get("data", {})
-                if d:
-                    current_data = d.get("current_data", {})
-                    tier = current_data.get("currenttierpatched") or d.get("currenttierpatched") or "Unranked"
-                    rr = current_data.get("ranking_in_tier", 0)
-                    elo = current_data.get("elo", 0)
-                    result = {"tier": tier, "rr": rr, "elo": elo, "region": reg, "success": True}
-                    self.cache.set(cache_key, result)
-                    return result
-
-        return {"tier": "Unranked", "rr": 0, "elo": 0, "region": region, "success": False}
-
-    async def get_matches(self, session: aiohttp.ClientSession, region: str, puuid: str) -> Dict[str, Any]:
-        cache_key = f"matches_{region}_{puuid}".lower()
-        cached = self.cache.get(cache_key)
-        if cached:
-            return cached
-
-        target_regions = list(dict.fromkeys([region, "tr", "eu"]))
-        for reg in target_regions:
-            url = f"{self.primary_base}/val/v3/by-puuid/matches/{reg}/{puuid}"
-            status, data = await self._safe_get(session, url)
-            if status == 200 and data:
-                matches = []
-                raw_data = data.get("data", [])
-                if isinstance(raw_data, list):
-                    matches = raw_data
-                elif isinstance(raw_data, dict):
-                    matches = raw_data.get("matches", [])
-
-                if matches:
-                    result = {"matches": matches, "region": reg, "success": True}
-                    self.cache.set(cache_key, result)
-                    return result
-
-        return {"matches": [], "region": region, "success": False}
-
+            raw_data = data.get("data", [])
+            if isinstance(raw_data, list): return raw_data
+            if isinstance(raw_data, dict): return raw_data.get("matches", [])
+        return []
 
 # =====================================================================
 # 4. İSTATİSTİK ANALİZ MOTORU
@@ -210,51 +150,33 @@ class ValorantAPIClient:
 class StatisticsAnalyzer:
     @staticmethod
     def analyze_player(matches: List[Dict[str, Any]], puuid: str) -> Dict[str, Any]:
-        agents_played = []
-        total_kills = 0
-        total_deaths = 0
-        total_assists = 0
-        total_score = 0
-        matches_count = len(matches)
-
+        agents, kills, deaths, assists, score = [], 0, 0, 0, 0
+        
         for match in matches:
-            players_section = match.get("players", {})
-            players_list = players_section.get("all_players", [])
-            
-            for p in players_list:
+            players = match.get("players", {}).get("all_players", [])
+            for p in players:
                 if p.get("puuid") == puuid:
-                    agents_played.append(p.get("character", "Bilinmiyor"))
+                    agents.append(p.get("character", "Bilinmiyor"))
                     stats = p.get("stats", {})
-                    total_kills += stats.get("kills", 0)
-                    total_deaths += stats.get("deaths", 0)
-                    total_assists += stats.get("assists", 0)
-                    total_score += stats.get("score", 0)
+                    kills += stats.get("kills", 0)
+                    deaths += stats.get("deaths", 0)
+                    assists += stats.get("assists", 0)
+                    score += stats.get("score", 0)
 
-        main_agent = Counter(agents_played).most_common(1)[0][0] if agents_played else "Bilinmiyor"
-        div = matches_count if matches_count > 0 else 1
-
-        avg_kd = round(total_kills / total_deaths, 2) if total_deaths > 0 else float(total_kills)
-        avg_kills = round(total_kills / div, 1)
-        avg_deaths = round(total_deaths / div, 1)
-        avg_assists = round(total_assists / div, 1)
-        avg_score = round(total_score / div, 1)
-
+        match_count = len(matches) or 1
         return {
-            "matches_analyzed": matches_count,
-            "main_agent": main_agent,
-            "avg_kd": avg_kd,
-            "avg_kills": avg_kills,
-            "avg_deaths": avg_deaths,
-            "avg_assists": avg_assists,
-            "avg_score": avg_score,
-            "total_kills": total_kills,
-            "total_deaths": total_deaths,
-            "total_assists": total_assists
+            "matches_analyzed": len(matches),
+            "main_agent": Counter(agents).most_common(1)[0][0] if agents else "Bilinmiyor",
+            "avg_kd": round(kills / deaths, 2) if deaths > 0 else float(kills),
+            "avg_kills": round(kills / match_count, 1),
+            "avg_deaths": round(deaths / match_count, 1),
+            "avg_assists": round(assists / match_count, 1),
+            "avg_score": round(score / match_count, 1),
+            "total_kills": kills, "total_deaths": deaths, "total_assists": assists
         }
 
-
 # =====================================================================
-# 5. ETKİLEŞİMLİ ARAYÜZ (VIEWS)
+# 5. ARAYÜZ (VIEWS)
 # =====================================================================
 
 class ProfilePagingView(discord.ui.View):
@@ -271,24 +193,17 @@ class ProfilePagingView(discord.ui.View):
 
     @discord.ui.button(label="◀ Önceki", style=discord.ButtonStyle.blurple)
     async def prev_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user.id != self.ctx.author.id:
-            await interaction.response.send_message("Sadece komutu kullanan kişi değiştirebilir.", ephemeral=True)
-            return
-        if self.current_page > 0:
-            self.current_page -= 1
-            self.update_buttons()
-            await interaction.response.edit_message(embed=self.pages[self.current_page], view=self)
+        if interaction.user.id != self.ctx.author.id: return
+        self.current_page -= 1
+        self.update_buttons()
+        await interaction.response.edit_message(embed=self.pages[self.current_page], view=self)
 
     @discord.ui.button(label="Sonraki ▶", style=discord.ButtonStyle.blurple)
     async def next_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user.id != self.ctx.author.id:
-            await interaction.response.send_message("Sadece komutu kullanan kişi değiştirebilir.", ephemeral=True)
-            return
-        if self.current_page < len(self.pages) - 1:
-            self.current_page += 1
-            self.update_buttons()
-            await interaction.response.edit_message(embed=self.pages[self.current_page], view=self)
-
+        if interaction.user.id != self.ctx.author.id: return
+        self.current_page += 1
+        self.update_buttons()
+        await interaction.response.edit_message(embed=self.pages[self.current_page], view=self)
 
 # =====================================================================
 # 6. ANA COG
@@ -298,114 +213,92 @@ class Stats(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.api_client = ValorantAPIClient(bot)
-        self.embed_color = 0x00F0FF
+
+    @commands.command(name="kayit", aliases=["register"])
+    async def kayit(self, ctx, *, riot_id: str):
+        """Discord hesabınızı kalıcı olarak PUUID ile eşleştirir."""
+        if "#" not in riot_id:
+            return await ctx.send("Kullanım: `v!kayit İsim#Tag`")
+        
+        name, tag = [p.strip() for p in riot_id.split("#", 1)]
+        tag = tag.split()[0][:6]
+        
+        msg = await ctx.send(f"⏳ `{name}#{tag}` doğrulanıyor...")
+        async with aiohttp.ClientSession() as session:
+            acc = await self.api_client.get_account_by_name(session, name, tag)
+            if not acc["success"]:
+                return await msg.edit(content="❌ Oyuncu bulunamadı (API yanıt vermedi veya isim hatalı).")
+            
+            GlobalDatabase.register_user(ctx.author.id, acc["puuid"], acc["name"], acc["tag"], acc["region"])
+            await msg.edit(content=f"✅ Başarıyla kaydedildi! Sistem Discord kimliğinizi `{acc['name']}#{acc['tag']}` ile eşleştirdi.")
 
     @commands.command(name="stats", aliases=["istatistik", "stat"])
-    async def stats(self, ctx, *, target_user: Optional[str] = None):
-        if not target_user or "#" not in target_user:
-            await ctx.send("Lütfen geçerli bir Riot ID girin! Örnek: `v!stats İsim#Tag`")
-            return
+    async def stats(self, ctx, user: discord.Member = None):
+        """Kayıtlı Discord kullanıcılarının verilerini çeker."""
+        target = user or ctx.author
+        db_user = GlobalDatabase.get_user(target.id)
 
-        name_part, tag_part = target_user.split("#", 1)
-        name = name_part.strip()
-        tag = tag_part.strip().split()[0][:6]
+        if not db_user:
+            return await ctx.send(f"❌ {target.mention} global sisteme kayıtlı değil! Önce `v!kayit İsim#Tag` yapılmalı.")
 
-        loading_embed = discord.Embed(
-            title="PUUID ve Hesap Bilgileri Çekiliyor...",
-            description=f"**{name}#{tag}** için Riot sunucularına bağlanılıyor...",
-            color=self.embed_color
-        )
-        loading_msg = await ctx.send(embed=loading_embed)
+        msg = await ctx.send(embed=discord.Embed(description=f"🔍 `{db_user['name']}#{db_user['tag']}` için veriler getiriliyor...", color=0x00F0FF))
 
+        puuid, region = db_user["puuid"], db_user["region"]
+        
         async with aiohttp.ClientSession() as session:
-            account_res = await self.api_client.get_account(session, name, tag)
-            if not account_res.get("success") or not account_res.get("puuid"):
-                await loading_msg.edit(content=f"**{name}#{tag}** adında bir oyuncu bulunamadı veya API anahtarı bekleniyor.")
-                return
-
-            puuid = account_res["puuid"]
-            region = account_res["region"]
-            account_level = account_res["account_level"]
-            card_info = account_res["card"]
-            real_name = account_res["name"]
-            real_tag = account_res["tag"]
-
-            mmr_res = await self.api_client.get_mmr(session, region, puuid)
-            tier = mmr_res.get("tier", "Unranked")
-            rr = mmr_res.get("rr", 0)
-            elo = mmr_res.get("elo", 0)
-
-            match_res = await self.api_client.get_matches(session, region, puuid)
-            matches = match_res.get("matches", [])
+            # Sadece PUUID ile kesin istek atılır, Name/Tag sorunu yaşanmaz.
+            mmr = await self.api_client.get_mmr_by_puuid(session, region, puuid)
+            matches = await self.api_client.get_matches_by_puuid(session, region, puuid)
 
         metrics = StatisticsAnalyzer.analyze_player(matches, puuid)
-        v_coins = DatabaseManager.get_user_balance(str(ctx.author.id))
-
-        page_one = discord.Embed(
-            title=f"OYUNCU PROFİLİ | {real_name}#{real_tag}",
-            description=f"**PUUID:** `{puuid[:12]}...`\n**Bölge:** `{region.upper()}` | **Seviye:** `{account_level}`",
-            color=self.embed_color,
-            timestamp=datetime.utcnow()
+        
+        embed1 = discord.Embed(
+            title=f"OYUNCU PROFİLİ | {db_user['name']}#{db_user['tag']}",
+            description=f"**Bölge:** `{region.upper()}` | **Kayıtlı DC:** {target.mention}",
+            color=0x00F0FF
         )
-
-        if card_info.get("small"):
-            page_one.set_thumbnail(url=card_info.get("small"))
-        if card_info.get("large"):
-            page_one.set_image(url=card_info.get("large"))
-
-        page_one.add_field(
-            name="Rekabetçi Bilgileri",
-            value=f"• **Güncel Rank:** `{tier}`\n• **Kadem Puanı (RR):** `{rr} RR`\n• **ELO:** `{elo}`",
-            inline=False
-        )
-
-        page_one.add_field(
-            name="Son Maç Performans Özeti",
-            value=(
-                f"• **İncelenen Maç Sayısı:** `{metrics['matches_analyzed']}`\n"
-                f"• **En Çok Oynanan Ajan:** `{metrics['main_agent']}`\n"
-                f"• **Ortalama K/D:** `{metrics['avg_kd']}`\n"
-                f"• **Ortalama K / D / A:** `{metrics['avg_kills']} / {metrics['avg_deaths']} / {metrics['avg_assists']}`\n"
-                f"• **Ortalama Skor:** `{metrics['avg_score']}`"
-            ),
-            inline=False
-        )
-
-        if v_coins > 0:
-            page_one.add_field(name="Cüzdan Bakiyesi", value=f"• **V-Coin:** `{v_coins}`", inline=False)
-
-        page_one.set_footer(text=f"V-Tracker.gg • PUUID Tabanlı Kesin Sistem • {ctx.author}", icon_url=ctx.author.display_avatar.url)
-
-        page_two = discord.Embed(
-            title=f"DETAYLI SAVAŞ ANALİZİ | {real_name}#{real_tag}",
-            description=f"Son `{metrics['matches_analyzed']}` maçın PUUID tabanlı dökümü:",
-            color=self.embed_color,
-            timestamp=datetime.utcnow()
-        )
-        if card_info.get("small"):
-            page_two.set_thumbnail(url=card_info.get("small"))
-
-        page_two.add_field(
-            name="Toplam Çatışma Verileri",
-            value=(
-                f"• **Toplam Kill:** `{metrics['total_kills']}`\n"
-                f"• **Toplam Death:** `{metrics['total_deaths']}`\n"
-                f"• **Toplam Asist:** `{metrics['total_assists']}`\n"
-                f"• **Genel K/D:** `{(metrics['total_kills'] / max(1, metrics['total_deaths'])):.2f}`"
-            ),
-            inline=False
-        )
-        page_two.set_footer(text="V-Tracker.gg • Sayfa 2/2")
-
-        pages = [page_one, page_two]
+        embed1.add_field(name="🏆 Rekabetçi", value=f"• **Rank:** `{mmr['tier']}`\n• **RR:** `{mmr['rr']}`\n• **ELO:** `{mmr['elo']}`", inline=False)
+        embed1.add_field(name="📊 Son Performans Özeti", value=f"• **Maç:** `{metrics['matches_analyzed']}`\n• **Main:** `{metrics['main_agent']}`\n• **K/D:** `{metrics['avg_kd']}`\n• **Skor:** `{metrics['avg_kills']}/{metrics['avg_deaths']}/{metrics['avg_assists']}`", inline=False)
+        
+        embed2 = discord.Embed(title=f"DETAYLI SAVAŞ ANALİZİ | {db_user['name']}#{db_user['tag']}", color=0x00F0FF)
+        embed2.add_field(name="⚔️ Toplam Çatışma Verileri", value=f"• **Kill:** `{metrics['total_kills']}`\n• **Death:** `{metrics['total_deaths']}`\n• **Asist:** `{metrics['total_assists']}`", inline=False)
+        
         try:
-            view = ProfilePagingView(ctx, pages)
-            msg = await loading_msg.edit(content=None, embed=page_one, view=view)
+            view = ProfilePagingView(ctx, [embed1, embed2])
+            await msg.edit(content=None, embed=embed1, view=view)
             view.message = msg
         except Exception:
-            await ctx.send(embed=page_one)
+            await ctx.send(embed=embed1)
 
+    @commands.command(name="duo")
+    async def duo(self, ctx):
+        """Global sistemde yakın ELO'ya sahip eşleşme arar."""
+        user_record = GlobalDatabase.get_user(ctx.author.id)
+        if not user_record: return await ctx.send("❌ `v!kayit` komutu ile kayıt olmalısınız.")
+
+        msg = await ctx.send("🔍 Veritabanındaki diğer oyuncuların rankları analiz ediliyor...")
+        
+        async with aiohttp.ClientSession() as session:
+            my_mmr = await self.api_client.get_mmr_by_puuid(session, user_record["region"], user_record["puuid"])
+            my_elo = my_mmr.get("elo", 0)
+
+            best_match, min_diff = None, float('inf')
+            
+            for dc_id, data in GlobalDatabase.get_all_users().items():
+                if int(dc_id) == ctx.author.id: continue
+                
+                target_mmr = await self.api_client.get_mmr_by_puuid(session, data["region"], data["puuid"])
+                diff = abs(my_elo - target_mmr.get("elo", 0))
+                
+                if diff < min_diff:
+                    min_diff, best_match = diff, {"dc": dc_id, "name": data["name"], "tag": data["tag"], "tier": target_mmr["tier"]}
+
+        if not best_match: return await msg.edit(content="Sistemde uygun oyuncu bulunamadı.")
+        
+        embed = discord.Embed(title="🔗 Duo Bulundu!", color=0x00FF00)
+        embed.add_field(name="Sen", value=f"Rank: `{my_mmr['tier']}`")
+        embed.add_field(name="Eşleşme", value=f"Oyuncu: <@{best_match['dc']}>\nRank: `{best_match['tier']}`")
+        await msg.edit(content=None, embed=embed)
 
 async def setup(bot):
     await bot.add_cog(Stats(bot))
-    logger.info("Stats Cog (PUUID Kesin Sürüm) yüklendi.")
