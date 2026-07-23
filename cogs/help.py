@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 """
-V-Tracker.gg - Yardım ve Rehber Modülü
 Modül: cogs.help
 """
 
@@ -18,40 +17,14 @@ if not logger.handlers:
 WEB_PANEL_URL = "https://valorant-bot-x6tv.onrender.com/"
 
 class HelpSelect(discord.ui.Select):
-    """Yardım menüsü kategorilerini değiştiren açılır menü sınıfı."""
     def __init__(self, embeds: dict):
         self.embeds = embeds
         options = [
-            discord.SelectOption(
-                label="Genel Bakış",
-                description="Botun çalışma mantığı ve web paneli bağlantısı.",
-                emoji="📋",
-                value="general"
-            ),
-            discord.SelectOption(
-                label="Kayıt İşlemleri",
-                description="Riot ID ve Discord ID eşleştirme komutları.",
-                emoji="🔗",
-                value="register"
-            ),
-            discord.SelectOption(
-                label="İstatistik Analizi",
-                description="3 sayfalık detaylı maç ve performans raporları.",
-                emoji="📊",
-                value="stats"
-            ),
-            discord.SelectOption(
-                label="Ekonomi ve Liderlik",
-                description="V-Coin cüzdan sistemi ve liderlik tablosu.",
-                emoji="💰",
-                value="economy"
-            ),
-            discord.SelectOption(
-                label="Hata ve Çözümler",
-                description="Sık karşılaşılan hatalar ve çözüm yolları.",
-                emoji="⚠️",
-                value="faq"
-            )
+            discord.SelectOption(label="Genel Bakış", description="Botun çalışma mantığı ve web paneli.", emoji="📋", value="general"),
+            discord.SelectOption(label="Kayıt İşlemleri", description="Riot ID ve Discord ID eşleştirme.", emoji="🔗", value="register"),
+            discord.SelectOption(label="İstatistik Analizi", description="3 sayfalık detaylı maç raporları.", emoji="📊", value="stats"),
+            discord.SelectOption(label="Ekonomi ve Liderlik", description="V-Coin cüzdan ve liderlik tablosu.", emoji="💰", value="economy"),
+            discord.SelectOption(label="Hata ve Çözümler", description="Sık karşılaşılan hatalar ve çözümleri.", emoji="⚠️", value="faq")
         ]
         super().__init__(placeholder="Bir kategori seçin...", min_values=1, max_values=1, options=options, row=0)
 
@@ -63,7 +36,6 @@ class HelpSelect(discord.ui.Select):
             await interaction.response.send_message("Kategori bulunamadı.", ephemeral=True)
 
 class HelpView(discord.ui.View):
-    """Yardım menüsü arayüzünü ve butonlarını yöneten sınıf."""
     def __init__(self, embeds: dict):
         super().__init__(timeout=180)
         self.embeds = embeds
@@ -72,10 +44,6 @@ class HelpView(discord.ui.View):
     async def on_timeout(self):
         for child in self.children:
             child.disabled = True
-        try:
-            pass
-        except Exception as e:
-            logger.error(f"Zaman aşımı hatası: {e}")
 
     @discord.ui.button(label="Web Paneli", style=discord.ButtonStyle.link, url=WEB_PANEL_URL, emoji="🌐", row=1)
     async def web_button(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -89,7 +57,6 @@ class HelpView(discord.ui.View):
             await interaction.response.edit_message(content="Menü kapatıldı.", embed=None, view=None)
 
 class HelpCog(commands.Cog):
-    """V-Tracker.gg yardım komutlarını barındıran ana modül."""
     def __init__(self, bot):
         self.bot = bot
 
@@ -188,12 +155,13 @@ class HelpCog(commands.Cog):
             "faq": embed_faq
         }
 
-    @commands.command(name="vhelp", aliases=["help", "yardim", "komutlar"])
-    async def vhelp(self, ctx):
+    @commands.command(name="help", aliases=["vhelp", "yardim", "komutlar"])
+    async def help_command(self, ctx):
         embeds = self.create_embeds(ctx)
         view = HelpView(embeds)
         await ctx.send(embed=embeds["general"], view=view)
 
 async def setup(bot):
+    bot.remove_command('help')
     await bot.add_cog(HelpCog(bot))
     logger.info("HelpCog başarıyla yüklendi.")
