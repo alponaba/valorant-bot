@@ -290,16 +290,25 @@ class VTrackerSystem(commands.Cog):
 
     @commands.command(name="stats", aliases=["istatistik", "profil"])
     async def stats_command(self, ctx, *, hedef: str = None):
-        caller_id = str(ctx.author.id)
-        caller_db = GlobalDatabase.get_user(caller_id)
+        target_id = str(ctx.author.id)
         
-        if not caller_db:
-            return await ctx.send("🔒 Bu komutu kullanmak için kayıt olmalısın. Örnek: `v!register [Discord ID] [İsim#Tag]`")
+        if hedef:
+            cleaned_target = hedef.strip("<@!>")
+            if cleaned_target.isdigit():
+                target_id = cleaned_target
 
-        target_name = caller_db.get("name")
-        target_tag = caller_db.get("tag")
-        target_puuid = caller_db.get("puuid")
-        target_region = caller_db.get("region", "eu")
+        target_db = GlobalDatabase.get_user(target_id)
+        
+        if not target_db:
+            if target_id != str(ctx.author.id):
+                return await ctx.send(f"❌ Belirttiğin kullanıcı sisteme kayıtlı değil.")
+            else:
+                return await ctx.send("🔒 Bu komutu kullanmak için kayıt olmalısın. Örnek: `v!register [Discord ID] [İsim#Tag]`")
+
+        target_name = target_db.get("name")
+        target_tag = target_db.get("tag")
+        target_puuid = target_db.get("puuid")
+        target_region = target_db.get("region", "eu")
 
         loading_msg = await ctx.send(f"Analiz ediliyor...")
 
@@ -312,7 +321,7 @@ class VTrackerSystem(commands.Cog):
                         if acc_init_data and isinstance(acc_init_data, dict):
                             target_puuid = acc_init_data.get("puuid")
                             target_region = (acc_init_data.get("region") or "eu").lower()
-                            GlobalDatabase.register_user(ctx.author.id, target_puuid, target_name, target_tag, target_region)
+                            GlobalDatabase.register_user(target_id, target_puuid, target_name, target_tag, target_region)
 
                 acc = await self.api.get_account(session, target_name, target_tag)
                 if not acc or not isinstance(acc, dict) or "data" not in acc:
