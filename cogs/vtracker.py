@@ -75,7 +75,7 @@ class GlobalDatabase:
         return db.get(str(discord_id))
 
 # =====================================================================
-# 3. VALORANT API İSTEMCİSİ (ÖZEL KARAKTER UYUMLU)
+# 3. VALORANT API İSTEMCİSİ (ZAMAN AŞIMI KORUMALI)
 # =====================================================================
 
 class ValorantAPI:
@@ -93,17 +93,18 @@ class ValorantAPI:
 
     async def _get(self, session: aiohttp.ClientSession, url: str) -> Optional[Dict[str, Any]]:
         try:
-            async with session.get(url, headers=self.headers, timeout=15) as response:
+            logger.info(f"API İstek Atılıyor -> {url}")
+            async with session.get(url, headers=self.headers) as response:
+                logger.info(f"API Yanıt Döndü [Kod: {response.status}] -> {url}")
                 if response.status == 200:
                     return await response.json()
                 else:
                     logger.warning(f"API Yanıt Hatası | URL: {url} | Kod: {response.status}")
         except Exception as e:
-            logger.error(f"API İstek İstisnası: {e}")
+            logger.error(f"API İstek İstisnası ({url}): {e}")
         return None
 
     async def get_account(self, session, name: str, tag: str):
-        # Özel/Unicode karakterlerin (örn. Japonca) düzgün iletilmesi için güvenli safe='' kodlaması
         encoded_name = urllib.parse.quote(name, safe='')
         encoded_tag = urllib.parse.quote(tag, safe='')
         url = f"{self.base_url}/valorant/v1/account/{encoded_name}/{encoded_tag}"
@@ -275,7 +276,8 @@ class VTrackerSystem(commands.Cog):
         elif "#" in hedef:
             name, tag = hedef.split("#", 1)
             msg = await ctx.send(f"🔍 `{name}#{tag}` aranıyor...")
-            async with aiohttp.ClientSession() as session:
+            timeout_cfg = aiohttp.ClientTimeout(total=12)
+            async with aiohttp.ClientSession(timeout=timeout_cfg) as session:
                 acc_data = await self.api.get_account(session, name, tag)
                 if not acc_data or "data" not in acc_data:
                     return await msg.edit(content="❌ Oyuncu Riot sunucularında bulunamadı.")
@@ -291,7 +293,10 @@ class VTrackerSystem(commands.Cog):
         loading_msg = await ctx.send(f"🔮 **{target_name}#{target_tag}** için istatistikler ve maç geçmişi analiz ediliyor...")
 
         try:
-            async with aiohttp.ClientSession() as session:
+            timeout_cfg = aiohttp.ClientTimeout(total=15)
+            async with aiohttp.ClientSession(timeout=timeout_cfg) as session:
+                logger.info(f"Stats Başlatıldı -> Oyuncu: {target_name}#{target_tag} | Bölge: {target_region}")
+                
                 acc = await self.api.get_account(session, target_name, target_tag)
                 if not acc or "data" not in acc:
                     return await loading_msg.edit(content="❌ Hesap bilgileri çekilemedi.")
@@ -365,7 +370,7 @@ class VTrackerSystem(commands.Cog):
 
         except Exception as e:
             logger.error(f"Stats Komutu Kritik Hatası: {e}", exc_info=True)
-            await loading_msg.edit(content=f"❌ İstatistikler analiz edilirken bir hata oluştu: `{e}`")
+            await loading_msg.edit(content=f"❌ İstatistikler analiz edilirken zaman aşımı veya bağlantı hatası oluştu: `{e}`")
 
 async def setup(bot):
     await bot.add_cog(VTrackerSystem(bot))
