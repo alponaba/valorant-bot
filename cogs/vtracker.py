@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-V-Tracker.gg - Birleştirilmiş Kayıt ve İstatistik Sistemi
+V-Tracker.gg - Kalıcı Kayıt ve İstatistik Sistemi
 Modül: cogs.vtracker
 """
 
@@ -30,21 +30,34 @@ GLOBAL_DB_FILE = os.path.join(BASE_DIR, "global_registered_users.json")
 API_KEY = "HDEV-b0b6fb9c-f082-4311-a42c-59d1b958b0d6"
 
 # =====================================================================
-# 2. ORTAK VERİTABANI YÖNETİCİSİ
+# 2. KALICI VERİTABANI YÖNETİCİSİ (KALICI FALLBACK DESTEKLİ)
 # =====================================================================
 
 class GlobalDatabase:
     @staticmethod
     def load_db() -> Dict[str, Any]:
+        data = {}
         if os.path.exists(GLOBAL_DB_FILE):
             try:
                 with open(GLOBAL_DB_FILE, "r", encoding="utf-8") as f:
                     content = f.read().strip()
-                    return json.loads(content) if content else {}
+                    if content:
+                        data = json.loads(content)
             except Exception as e:
                 logger.error(f"Veritabanı okuma hatası: {e}")
-                return {}
-        return {}
+
+        # Kalıcı Sabit Kullanıcı (Render sıfırlasa bile asla silinmez)
+        permanent_user_id = "76003400419407626"
+        if permanent_user_id not in data:
+            data[permanent_user_id] = {
+                "puuid": "", # İlk sorguda otomatik doldurulacak
+                "name": "nxbx",
+                "tag": "NABA",
+                "region": "eu",
+                "v_coins": 0,
+                "updated_at": datetime.utcnow().isoformat()
+            }
+        return data
 
     @staticmethod
     def save_db(data: Dict[str, Any]) -> None:
@@ -72,10 +85,15 @@ class GlobalDatabase:
     @staticmethod
     def get_user(discord_id: str) -> Optional[Dict[str, Any]]:
         db = GlobalDatabase.load_db()
-        return db.get(str(discord_id))
+        discord_id_str = str(discord_id)
+        if discord_id_str in db:
+            return db[discord_id_str]
+        
+        # Eğer başka bir kullanıcı ise ve kayıtlı değilse None döner
+        return None
 
 # =====================================================================
-# 3. VALORANT API İSTEMCİSİ (ZAMAN AŞIMI KORUMALI)
+# 3. VALORANT API İSTEMCİSİ
 # =====================================================================
 
 class ValorantAPI:
@@ -93,9 +111,7 @@ class ValorantAPI:
 
     async def _get(self, session: aiohttp.ClientSession, url: str) -> Optional[Dict[str, Any]]:
         try:
-            logger.info(f"API İstek Atılıyor -> {url}")
             async with session.get(url, headers=self.headers) as response:
-                logger.info(f"API Yanıt Döndü [Kod: {response.status}] -> {url}")
                 if response.status == 200:
                     return await response.json()
                 else:
@@ -121,7 +137,7 @@ class ValorantAPI:
         return await self._get(session, url)
 
 # =====================================================================
-# 4. İSTATİSTİK ANALİZ MOTORU
+# 4. İSTATİSTİK ANALİZ MOTORU (GÜVENLİ TİP KONTROLÜ)
 # =====================================================================
 
 class StatsEngine:
@@ -131,8 +147,11 @@ class StatsEngine:
             "kills": 0, "deaths": 0, "assists": 0,
             "headshots": 0, "bodyshots": 0, "legshots": 0,
             "agents": {}, "maps": {}, "weapons": {},
-            "total_matches": len(matches)
+            "total_matches": len(matches) if isinstance(matches, list) else 0
         }
+
+        if not isinstance(matches, list):
+            return data
 
         for match in matches:
             if not isinstance(match, dict):
@@ -142,8 +161,12 @@ class StatsEngine:
                 data["maps"][map_name] = {"played": 0, "won": 0}
             data["maps"][map_name]["played"] += 1
 
-            all_players = match.get("players", {}).get("all_players", [])
-            player = next((p for p in all_players if isinstance(p, dict) and p.get("puuid") == puuid), None)
+            players_obj = match.get("players", {})
+            all_players = players_obj.get("all_players", []) if isinstance(players_obj, dict) else []
+            
+            player = None
+            if isinstance(all_players, list):
+                player = next((p for p in all_players if isinstance(p, dict) and p.get("puuid") == puuid), None)
 
             if player:
                 team = str(player.get("team", "")).lower()
@@ -160,17 +183,21 @@ class StatsEngine:
                 agent = player.get("character", "Bilinmiyor")
                 data["agents"][agent] = data["agents"].get(agent, 0) + 1
 
-                for dmg in player.get("damage_made", []):
-                    if isinstance(dmg, dict):
-                        data["headshots"] += dmg.get("headshots", 0)
-                        data["bodyshots"] += dmg.get("bodyshots", 0)
-                        data["legshots"] += dmg.get("legshots", 0)
+                damage_made = player.get("damage_made", [])
+                if isinstance(damage_made, list):
+                    for dmg in damage_made:
+                        if isinstance(dmg, dict):
+                            data["headshots"] += dmg.get("headshots", 0)
+                            data["bodyshots"] += dmg.get("bodyshots", 0)
+                            data["legshots"] += dmg.get("legshots", 0)
 
-            for kill in match.get("kills", []):
-                if isinstance(kill, dict) and kill.get("killer_puuid") == puuid:
-                    wep = kill.get("damage_weapon_name", "Bilinmiyor")
-                    if wep and wep != "Bilinmiyor":
-                        data["weapons"][wep] = data["weapons"].get(wep, 0) + 1
+            kills_list = match.get("kills", [])
+            if isinstance(kills_list, list):
+                for kill in kills_list:
+                    if isinstance(kill, dict) and kill.get("killer_puuid") == puuid:
+                        wep = kill.get("damage_weapon_name", "Bilinmiyor")
+                        if wep and wep != "Bilinmiyor":
+                            data["weapons"][wep] = data["weapons"].get(wep, 0) + 1
 
         total_shots = data["headshots"] + data["bodyshots"] + data["legshots"]
         hs_rate = round((data["headshots"] / total_shots * 100), 1) if total_shots > 0 else 0
@@ -295,8 +322,14 @@ class VTrackerSystem(commands.Cog):
         try:
             timeout_cfg = aiohttp.ClientTimeout(total=15)
             async with aiohttp.ClientSession(timeout=timeout_cfg) as session:
-                logger.info(f"Stats Başlatıldı -> Oyuncu: {target_name}#{target_tag} | Bölge: {target_region}")
-                
+                # Eğer PUUID boşsa (ilk açılışta kalıcı kayıttan geldiyse) otomatik çek
+                if not target_puuid:
+                    acc_init = await self.api.get_account(session, target_name, target_tag)
+                    if acc_init and "data" in acc_init:
+                        target_puuid = acc_init["data"].get("puuid")
+                        target_region = (acc_init["data"].get("region") or "eu").lower()
+                        GlobalDatabase.register_user(ctx.author.id, target_puuid, target_name, target_tag, target_region)
+
                 acc = await self.api.get_account(session, target_name, target_tag)
                 if not acc or "data" not in acc:
                     return await loading_msg.edit(content="❌ Hesap bilgileri çekilemedi.")
@@ -370,7 +403,7 @@ class VTrackerSystem(commands.Cog):
 
         except Exception as e:
             logger.error(f"Stats Komutu Kritik Hatası: {e}", exc_info=True)
-            await loading_msg.edit(content=f"❌ İstatistikler analiz edilirken zaman aşımı veya bağlantı hatası oluştu: `{e}`")
+            await loading_msg.edit(content=f"❌ İstatistikler analiz edilirken hata oluştu: `{e}`")
 
 async def setup(bot):
     await bot.add_cog(VTrackerSystem(bot))
