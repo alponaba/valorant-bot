@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-V-Tracker.gg - Kalıcı Kayıt ve 2 Sayfalı Profesyonel İstatistik Sistemi
+V-Tracker.gg - Kalıcı Kayıt ve 3 Sayfalı Teknik İstatistik Sistemi
 Modül: cogs.vtracker
 """
 
@@ -142,7 +142,7 @@ class StatsEngine:
             "headshots": 0, "bodyshots": 0, "legshots": 0,
             "agents": {}, "maps": {}, "weapons": {},
             "total_damage": 0, "total_rounds": 0,
-            "wins": 0, "losses": 0,
+            "wins": 0, "losses": 0, "score_sum": 0,
             "total_matches": len(matches) if isinstance(matches, list) else 0
         }
 
@@ -179,6 +179,7 @@ class StatsEngine:
                 data["kills"] += stats.get("kills", 0)
                 data["deaths"] += stats.get("deaths", 0)
                 data["assists"] += stats.get("assists", 0)
+                data["score_sum"] += stats.get("score", 0)
                 
                 rounds_played = match.get("metadata", {}).get("rounds_played", 1)
                 if rounds_played < 1: rounds_played = 1
@@ -208,22 +209,25 @@ class StatsEngine:
         hs_rate = round((data["headshots"] / total_shots * 100), 1) if total_shots > 0 else 0
         kd_ratio = round(data["kills"] / data["deaths"], 2) if data["deaths"] > 0 else data["kills"]
         adr = round(data["total_damage"] / data["total_rounds"], 1) if data["total_rounds"] > 0 else 0
+        acs = round(data["score_sum"] / data["total_rounds"], 1) if data["total_rounds"] > 0 else 0
 
         sorted_maps = sorted(data["maps"].items(), key=lambda x: x[1]["played"], reverse=True)[:5]
-        sorted_weapons = sorted(data["weapons"].items(), key=lambda x: x[1], reverse=True)[:3]
+        sorted_weapons = sorted(data["weapons"].items(), key=lambda x: x[1], reverse=True)[:10]
         sorted_agents = sorted(data["agents"].items(), key=lambda x: x[1], reverse=True)
         main_agent = sorted_agents[0][0] if sorted_agents else "Yok"
 
         return {
             "kills": data["kills"], "deaths": data["deaths"], "assists": data["assists"],
-            "hs_rate": hs_rate, "kd": kd_ratio, "adr": adr,
+            "headshots": data["headshots"], "bodyshots": data["bodyshots"], "legshots": data["legshots"],
+            "hs_rate": hs_rate, "kd": kd_ratio, "adr": adr, "acs": acs,
+            "total_damage": data["total_damage"], "total_rounds": data["total_rounds"],
             "wins": data["wins"], "losses": data["losses"],
             "main_agent": main_agent, "top_agents": sorted_agents,
             "top_maps": sorted_maps, "top_weapons": sorted_weapons, "total_matches": data["total_matches"]
         }
 
 # =====================================================================
-# 5. SAYFALANDIRMA (PAGINATION VIEW)
+# 5. SAYFALANDIRMA (3 SAYFALI VIEW)
 # =====================================================================
 
 class StatsPaginationView(discord.ui.View):
@@ -318,7 +322,7 @@ class VTrackerSystem(commands.Cog):
 
                 stats = StatsEngine.analyze(match_data, target_puuid)
 
-                # ================= PAGE 1 =================
+                # ================= PAGE 1: GENEL BAKIŞ =================
                 embed1 = discord.Embed(
                     title=f"[{title}] {target_name}#{target_tag}",
                     description=f"Son **{stats['total_matches']} Maçın** Genel Analiz Raporu\nTalep eden: {ctx.author.mention}",
@@ -331,12 +335,12 @@ class VTrackerSystem(commands.Cog):
                 embed1.add_field(name="Seviye", value=f"`{level}`", inline=True)
                 embed1.add_field(name="En İyi Ajan", value=f"`{stats['main_agent']}`", inline=True)
 
-                combat_text = (
+                combat_text1 = (
                     f"**K/D/A:** `{stats['kills']}` / `{stats['deaths']}` / `{stats['assists']}`\n"
                     f"**K/D Oranı:** `{stats['kd']}`\n"
                     f"**HS Oranı:** `% {stats['hs_rate']}`"
                 )
-                embed1.add_field(name="Çatışma Analizi", value=combat_text, inline=False)
+                embed1.add_field(name="Çatışma Analizi", value=combat_text1, inline=False)
 
                 map_text = ""
                 for i, (m_name, m_data) in enumerate(stats['top_maps'], 1):
@@ -346,38 +350,69 @@ class VTrackerSystem(commands.Cog):
                     map_text += f"{i}. **{m_name}**: %{wr} WR `({wins}W / {played} Maç)`\n"
                 embed1.add_field(name="En Çok Oynanan Haritalar", value=map_text or "Veri yok.", inline=True)
 
-                wep_text = ""
-                for i, (w_name, w_kills) in enumerate(stats['top_weapons'], 1):
-                    wep_text += f"{i}. **{w_name}** - `{w_kills} Kill`\n"
-                embed1.add_field(name="En İyi Silahlar", value=wep_text or "Veri yok.", inline=True)
+                wep_text1 = ""
+                for i, (w_name, w_kills) in enumerate(stats['top_weapons'][:3], 1):
+                    wep_text1 += f"{i}. **{w_name}** - `{w_kills} Kill`\n"
+                embed1.add_field(name="En İyi Silahlar", value=wep_text1 or "Veri yok.", inline=True)
 
-                embed1.set_footer(text="Sayfa 1/2 • V-Tracker.gg Özel Analiz Motoru")
+                embed1.set_footer(text="Sayfa 1/3 • V-Tracker.gg Genel Bakış")
 
-                # ================= PAGE 2 =================
+                # ================= PAGE 2: TEKNİK ÇATIŞMA & HASAR METRİKLERİ =================
                 embed2 = discord.Embed(
                     title=f"[{title}] {target_name}#{target_tag}",
-                    description=f"Detaylı Rekabetçi Performans ve Ajan Dağılımı",
+                    description=f"İleri Düzey Çatışma, Hasar ve Vuruş Dağılımı",
                     color=0x00F0FF
                 )
                 if card_large:
                     embed2.set_thumbnail(url=card_large)
 
-                overview_text = (
-                    f"**Hasar / Tur (ADR):** `{stats['adr']}`\n"
-                    f"**K/D Oranı:** `{stats['kd']}`\n"
-                    f"**HS Oranı:** `% {stats['hs_rate']}`\n"
-                    f"**Kazanılan / Kaybedilen:** `{stats['wins']}W` / `{stats['losses']}L`"
+                tech_combat = (
+                    f"**Tur Başına Ortalama Hasar (ADR):** `{stats['adr']}`\n"
+                    f"**Ortalama Çatışma Skoru (ACS):** `{stats['acs']}`\n"
+                    f"**Toplam Verilen Hasar:** `{stats['total_damage']:,}` HP\n"
+                    f"**Analiz Edilen Toplam Tur:** `{stats['total_rounds']}` Tur"
                 )
-                embed2.add_field(name="Rekabetçi Genel Bakış", value=overview_text, inline=False)
+                embed2.add_field(name="Hasar ve Performans Metrikleri", value=tech_combat, inline=False)
 
-                agent_text = ""
-                for i, (agent_name, agent_count) in enumerate(stats['top_agents'][:5], 1):
-                    agent_text += f"{i}. **{agent_name}** - `{agent_count} Maç`\n"
-                embed2.add_field(name="En Çok Oynanan Ajanlar", value=agent_text or "Veri yok.", inline=False)
+                accuracy_text = (
+                    f"**Kafatası (Headshot):** `{stats['headshots']}` vuruş\n"
+                    f"**Gövde (Bodyshot):** `{stats['bodyshots']}` vuruş\n"
+                    f"**Bacak (Legshot):** `{stats['legshots']}` vuruş\n"
+                    f"**Genel İsabet Oranı:** `% {stats['hs_rate']}`"
+                )
+                embed2.add_field(name="Vuruş Bölgesi Dağılımı", value=accuracy_text, inline=False)
 
-                embed2.set_footer(text="Sayfa 2/2 • V-Tracker.gg Detaylı İstatistikler")
+                match_wl = (
+                    f"**Kazanılan Maç:** `{stats['wins']} Win`\n"
+                    f"**Kaybedilen Maç:** `{stats['losses']} Loss`\n"
+                    f"**Kazanma Oranı (Winrate):** `% {int((stats['wins'] / stats['total_matches']) * 100) if stats['total_matches'] > 0 else 0}`"
+                )
+                embed2.add_field(name="Maç Sonuç Özeti", value=match_wl, inline=False)
 
-                view = StatsPaginationView([embed1, embed2])
+                embed2.set_footer(text="Sayfa 2/3 • V-Tracker.gg Teknik Hasar Analizi")
+
+                # ================= PAGE 3: DERİN AJAN VE SİLAH DAĞILIMI =================
+                embed3 = discord.Embed(
+                    title=f"[{title}] {target_name}#{target_tag}",
+                    description=f"Kapsamlı Ajan Kullanım ve Silah Performans Dökümü",
+                    color=0x00F0FF
+                )
+                if card_large:
+                    embed3.set_thumbnail(url=card_large)
+
+                all_agents_text = ""
+                for i, (agent_name, agent_count) in enumerate(stats['top_agents'], 1):
+                    all_agents_text += f"{i}. **{agent_name}**: `{agent_count} Maç`\n"
+                embed3.add_field(name="Tüm Oynanan Ajanlar", value=all_agents_text or "Veri yok.", inline=True)
+
+                all_weaps_text = ""
+                for i, (w_name, w_kills) in enumerate(stats['top_weapons'], 1):
+                    all_weaps_text += f"{i}. **{w_name}**: `{w_kills} Kill`\n"
+                embed3.add_field(name="Detaylı Silah Kill Listesi", value=all_weaps_text or "Veri yok.", inline=True)
+
+                embed3.set_footer(text="Sayfa 3/3 • V-Tracker.gg Derinlemesine İstatistikler")
+
+                view = StatsPaginationView([embed1, embed2, embed3])
                 await loading_msg.edit(content=None, embed=embed1, view=view)
 
         except Exception as e:
