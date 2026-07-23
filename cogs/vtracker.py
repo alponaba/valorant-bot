@@ -71,10 +71,10 @@ class GlobalDatabase:
         db = GlobalDatabase.load_db()
         discord_id_str = str(discord_id)
         db[discord_id_str] = {
-            "puuid": puuid,
-            "name": name,
-            "tag": tag,
-            "region": region,
+            "puuid": puuid or "",
+            "name": name or "",
+            "tag": tag or "",
+            "region": region or "eu",
             "v_coins": db.get(discord_id_str, {}).get("v_coins", 0),
             "updated_at": datetime.utcnow().isoformat()
         }
@@ -110,6 +110,8 @@ class ValorantAPI:
             async with session.get(url, headers=self.headers) as response:
                 if response.status == 200:
                     return await response.json()
+                else:
+                    logger.warning(f"API HTTP Hata Kodu ({response.status}) - URL: {url}")
         except Exception as e:
             logger.error(f"API İstek İstisnası ({url}): {e}")
         return None
@@ -153,12 +155,13 @@ class StatsEngine:
             if not isinstance(match, dict):
                 continue
             
-            map_name = match.get("metadata", {}).get("map", "Bilinmiyor")
+            metadata = match.get("metadata") or {}
+            map_name = metadata.get("map", "Bilinmiyor")
             if map_name not in data["maps"]:
                 data["maps"][map_name] = {"played": 0, "won": 0}
             data["maps"][map_name]["played"] += 1
 
-            players_obj = match.get("players", {})
+            players_obj = match.get("players") or {}
             all_players = players_obj.get("all_players", []) if isinstance(players_obj, dict) else []
             
             player = None
@@ -167,7 +170,7 @@ class StatsEngine:
 
             if player:
                 team = str(player.get("team", "")).lower()
-                teams = match.get("teams", {})
+                teams = match.get("teams") or {}
                 if isinstance(teams, dict) and team in teams and isinstance(teams[team], dict):
                     if teams[team].get("has_won"):
                         data["maps"][map_name]["won"] += 1
@@ -175,14 +178,15 @@ class StatsEngine:
                     else:
                         data["losses"] += 1
 
-                stats = player.get("stats", {}) or {}
+                stats = player.get("stats") or {}
                 data["kills"] += stats.get("kills", 0)
                 data["deaths"] += stats.get("deaths", 0)
                 data["assists"] += stats.get("assists", 0)
                 data["score_sum"] += stats.get("score", 0)
                 
-                rounds_played = match.get("metadata", {}).get("rounds_played", 1)
-                if rounds_played < 1: rounds_played = 1
+                rounds_played = metadata.get("rounds_played", 1)
+                if not rounds_played or rounds_played < 1: 
+                    rounds_played = 1
                 data["total_rounds"] += rounds_played
 
                 agent = player.get("character", "Bilinmiyor")
@@ -274,10 +278,13 @@ class VTrackerSystem(commands.Cog):
 
         async with aiohttp.ClientSession() as session:
             acc_data = await self.api.get_account(session, name, tag)
-            if not acc_data or "data" not in acc_data:
+            if not acc_data or not isinstance(acc_data, dict) or "data" not in acc_data:
                 return await msg.edit(content=f"❌ Riot hesabı bulunamadı.")
 
             acc = acc_data["data"]
+            if not acc or not isinstance(acc, dict):
+                return await msg.edit(content=f"❌ API'den geçersiz veri döndü.")
+
             GlobalDatabase.register_user(discord_id_input, acc.get("puuid"), acc.get("name"), acc.get("tag"), (acc.get("region") or "eu").lower())
             await msg.edit(content=f"✅ Kayıt Başarılı! Artık `v!stats` komutunu kullanabilirsin.")
 
@@ -289,7 +296,10 @@ class VTrackerSystem(commands.Cog):
         if not caller_db:
             return await ctx.send("🔒 Bu komutu kullanmak için kayıt olmalısın. Örnek: `v!register [Discord ID] [İsim#Tag]`")
 
-        target_name, target_tag, target_puuid, target_region = caller_db["name"], caller_db["tag"], caller_db["puuid"], caller_db["region"]
+        target_name = caller_db.get("name")
+        target_tag = caller_db.get("tag")
+        target_puuid = caller_db.get("puuid")
+        target_region = caller_db.get("region", "eu")
 
         loading_msg = await ctx.send(f"Analiz ediliyor...")
 
@@ -297,28 +307,43 @@ class VTrackerSystem(commands.Cog):
             async with aiohttp.ClientSession() as session:
                 if not target_puuid:
                     acc_init = await self.api.get_account(session, target_name, target_tag)
-                    if acc_init and "data" in acc_init:
-                        target_puuid = acc_init["data"].get("puuid")
-                        target_region = (acc_init["data"].get("region") or "eu").lower()
-                        GlobalDatabase.register_user(ctx.author.id, target_puuid, target_name, target_tag, target_region)
+                    if acc_init and isinstance(acc_init, dict) and "data" in acc_init:
+                        acc_init_data = acc_init["data"]
+                        if acc_init_data and isinstance(acc_init_data, dict):
+                            target_puuid = acc_init_data.get("puuid")
+                            target_region = (acc_init_data.get("region") or "eu").lower()
+                            GlobalDatabase.register_user(ctx.author.id, target_puuid, target_name, target_tag, target_region)
 
                 acc = await self.api.get_account(session, target_name, target_tag)
-                account_data = acc.get("data", {})
+                if not acc or not isinstance(acc, dict) or "data" not in acc:
+                    return await loading_msg.edit(content=f"❌ Riot hesabı bulunamadı veya API yanıt vermedi.")
+
+                account_data = acc.get("data")
+                if not account_data or not isinstance(account_data, dict):
+                    return await loading_msg.edit(content=f"❌ Oyuncu bilgileri alınamadı.")
+
                 title = account_data.get("account_title", "Unvansız")
                 level = account_data.get("account_level", 0)
-                card_large = account_data.get("card", {}).get("large", "")
+                card_obj = account_data.get("card")
+                card_large = card_obj.get("large", "") if isinstance(card_obj, dict) else ""
 
                 mmr = await self.api.get_mmr(session, target_region, target_puuid)
                 rank_name, elo = "Derecesiz", 0
-                if mmr and "data" in mmr and mmr["data"].get("current_data"):
-                    rank_name = mmr["data"]["current_data"].get("currenttierpatched", "Derecesiz")
-                    elo = mmr["data"]["current_data"].get("ranking_in_tier", 0)
+                if mmr and isinstance(mmr, dict) and "data" in mmr:
+                    mmr_data = mmr["data"]
+                    if mmr_data and isinstance(mmr_data, dict) and mmr_data.get("current_data"):
+                        current_data = mmr_data["current_data"]
+                        if current_data and isinstance(current_data, dict):
+                            rank_name = current_data.get("currenttierpatched", "Derecesiz")
+                            elo = current_data.get("ranking_in_tier", 0)
 
                 matches = await self.api.get_matches(session, target_region, target_puuid, limit=15)
-                match_data = matches.get("data", []) if matches and "data" in matches else []
+                match_data = []
+                if matches and isinstance(matches, dict) and "data" in matches:
+                    match_data = matches["data"]
 
-                if not match_data:
-                    return await loading_msg.edit(content=f"Maç verisi bulunamadı.")
+                if not match_data or not isinstance(match_data, list):
+                    return await loading_msg.edit(content=f"❌ Maç verisi bulunamadı.")
 
                 stats = StatsEngine.analyze(match_data, target_puuid)
 
