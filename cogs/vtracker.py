@@ -192,14 +192,14 @@ class StatsEngine:
                 agent = player.get("character", "Bilinmiyor")
                 data["agents"][agent] = data["agents"].get(agent, 0) + 1
 
-                damage_made = player.get("damage_made", [])
-                if isinstance(damage_made, list):
-                    for dmg in damage_made:
-                        if isinstance(dmg, dict):
-                            data["headshots"] += dmg.get("headshots", 0)
-                            data["bodyshots"] += dmg.get("bodyshots", 0)
-                            data["legshots"] += dmg.get("legshots", 0)
-                            data["total_damage"] += dmg.get("damage", 0)
+                damage_made = player.get("damage_made", {})
+                if isinstance(damage_made, dict):
+                    for target_puuid, dmg_info in damage_made.items():
+                        if isinstance(dmg_info, dict):
+                            data["headshots"] += dmg_info.get("headshots", 0)
+                            data["bodyshots"] += dmg_info.get("bodyshots", 0)
+                            data["legshots"] += dmg_info.get("legshots", 0)
+                            data["total_damage"] += dmg_info.get("damage", 0)
 
             kills_list = match.get("kills", [])
             if isinstance(kills_list, list):
@@ -406,7 +406,7 @@ class VTrackerSystem(commands.Cog):
                     f"**Toplam Verilen Hasar:** `{stats['total_damage']:,}` HP\n"
                     f"**Analiz Edilen Toplam Tur:** `{stats['total_rounds']}` Tur"
                 )
-                embed2.add_field(name="Hasar ve Performans Metrikleri", value=tech_combat, inline=False)
+                embed2.add_field(name="Hasar and Performans Metrikleri", value=tech_combat, inline=False)
 
                 accuracy_text = (
                     f"**Kafatası (Headshot):** `{stats['headshots']}` vuruş\n"
