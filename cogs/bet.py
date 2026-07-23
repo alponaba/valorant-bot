@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import discord
 from discord.ext import commands
 import json
@@ -147,7 +148,7 @@ class WheelView(discord.ui.View):
 
         # 8 Bölümlü Çark Dilimleri ve Şans Oranları (Ağırlıkları)
         sectors = [
-            {"name": "0x (Iflas)", "mult": 0.0, "weight": 20, "emoji": "💀"},
+            {"name": "0x (İflas)", "mult": 0.0, "weight": 20, "emoji": "💀"},
             {"name": "0.5x (Yarım Kayıp)", "mult": 0.5, "weight": 20, "emoji": "📉"},
             {"name": "1x (Para İadesi)", "mult": 1.0, "weight": 25, "emoji": "🔄"},
             {"name": "1.5x Kâr", "mult": 1.5, "weight": 15, "emoji": "🪙"},
@@ -157,11 +158,9 @@ class WheelView(discord.ui.View):
             {"name": "10x JACKPOT!", "mult": 10.0, "weight": 1, "emoji": "💎"}
         ]
 
-        # Ağırlıklı rastgele seçim
         weights = [s["weight"] for s in sectors]
         chosen = random.choices(sectors, weights=weights, k=1)[0]
 
-        # Hesaplama mantığı
         if chosen["mult"] == 0.0:
             change = -self.amount
             desc_text = f"Çark 💀 **0x (İflas)** diliminde durdu!\n• Kaybedilen: **-{self.amount:,} V-Coin**"
