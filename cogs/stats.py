@@ -2,8 +2,8 @@
 """
 V-Tracker.gg - Gelişmiş Valorant İstatistik ve Oyuncu Profili Sistemi
 Modül: cogs.stats
-Açıklama: Görsel formatı koruyan, sıfır hata toleranslı ve tam veri çekme sürümü.
-Sürüm: 4.4.0-Enterprise
+Açıklama: Akıllı Tag Temizleme ve Kararlı API Veri Çekme Sürümü.
+Sürüm: 4.5.0-Enterprise
 """
 
 import discord
@@ -105,7 +105,7 @@ class APICacheManager:
 
 
 # =====================================================================
-# 3. VALORANT API İSTEMCİSİ (GÜNCELLENMİŞ JSON PARSER)
+# 3. VALORANT API İSTEMCİSİ (AKILLI TAG TEMİZLEME)
 # =====================================================================
 
 class ValorantAPIClient:
@@ -121,7 +121,7 @@ class ValorantAPIClient:
         return getattr(self.bot, "henrik_api_key", FALLBACK_API_KEY)
 
     def get_headers(self) -> Dict[str, str]:
-        headers = {"User-Agent": "V-Tracker-Bot/4.4.0"}
+        headers = {"User-Agent": "V-Tracker-Bot/4.5.0"}
         if self.api_key:
             headers["Authorization"] = self.api_key
         return headers
@@ -146,6 +146,7 @@ class ValorantAPIClient:
                     except json.JSONDecodeError:
                         return 500, None
                 else:
+                    logger.warning(f"⚠️ API Durum Kodu: {status} | Yanıt: {text[:200]}")
                     return status, None
         except Exception as e:
             logger.error(f"API İstek İstisnası: {e}")
@@ -195,7 +196,6 @@ class ValorantAPIClient:
             if status == 200 and data:
                 d = data.get("data", {})
                 if d:
-                    # Henrik API v2 MMR yapısı kontrolü (current_data veya direkt root)
                     current_data = d.get("current_data", {})
                     tier = current_data.get("currenttierpatched") or d.get("currenttierpatched") or d.get("currenttier")
                     rr = current_data.get("ranking_in_tier") if current_data.get("ranking_in_tier") is not None else d.get("ranking_in_tier", 0)
@@ -367,7 +367,7 @@ class Stats(commands.Cog):
 
     @commands.command(name="stats", aliases=["istatistik", "stat"])
     async def stats(self, ctx, *, target_user: Optional[str] = None):
-        """Oyuncunun Valorant istatistiklerini kusursuz formatta getirir."""
+        """Oyuncunun Valorant istatistiklerini kusursuz formatta getirir (v!stats)."""
         discord_id = str(ctx.author.id)
         riot_id = ""
         v_coins = 0
@@ -399,9 +399,10 @@ class Stats(commands.Cog):
             await ctx.send("❌ Geçerli bir Riot ID formatı doğrulanamadı.")
             return
 
-        name, tag = riot_id.split("#", 1)
-        name = name.strip()
-        tag = tag.strip()
+        # Akıllı Tag Temizleme: Tag boşluk içeriyorsa (örn: "NABA 1600"), ilk kelimeyi al.
+        name_part, tag_part = riot_id.split("#", 1)
+        name = name_part.strip()
+        tag = tag_part.strip().split()[0][:6]  # Sadece ilk kelime ve max 6 karakter
 
         loading_embed = discord.Embed(
             title="🔍 Riot Games Verileri Taranıyor...",
@@ -500,7 +501,9 @@ class Stats(commands.Cog):
         pages = [page_one, page_two]
 
         try:
-            await loading_msg.edit(content=None, embed=page_one, view=ProfilePagingView(ctx, pages))
+            view = ProfilePagingView(ctx, pages)
+            msg = await loading_msg.edit(content=None, embed=page_one, view=view)
+            view.message = msg
         except discord.HTTPException:
             await ctx.send(embed=page_one)
 
@@ -512,4 +515,4 @@ class Stats(commands.Cog):
 
 async def setup(bot):
     await bot.add_cog(Stats(bot))
-    logger.info("Stats Cog (Enterprise Kararlı Sürüm) başarıyla yüklendi.")
+    logger.info("Stats Cog (Akıllı Tag Temizlemeli Kararlı Sürüm) başarıyla yüklendi.")
