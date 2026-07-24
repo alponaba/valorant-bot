@@ -7,6 +7,7 @@ Modül: cogs.vtracker
 import discord
 from discord.ext import commands
 import aiohttp
+import asyncio
 import urllib.parse
 import json
 import os
@@ -120,13 +121,15 @@ class GlobalDatabase:
         return db.get(discord_id_str)
 
 # =====================================================================
-# 3. VALORANT API İSTEMCİSİ
+# 3. VALORANT API İSTEMCİSİ (ZAMAN AŞIMI KORUMALI)
 # =====================================================================
 
 class ValorantAPI:
     def __init__(self):
         self.base_url = "https://api.henrikdev.xyz"
         self.headers = {"User-Agent": "V-Tracker-Bot/8.0", "Authorization": API_KEY}
+        # İsteklerin asılı kalmasını önlemek için 10 saniyelik katı zaman aşımı
+        self.timeout = aiohttp.ClientTimeout(total=10)
 
     def _fix_region(self, region: str) -> str:
         if not region:
@@ -138,11 +141,13 @@ class ValorantAPI:
 
     async def _get(self, session: aiohttp.ClientSession, url: str) -> Optional[Dict[str, Any]]:
         try:
-            async with session.get(url, headers=self.headers) as response:
+            async with session.get(url, headers=self.headers, timeout=self.timeout) as response:
                 if response.status == 200:
                     return await response.json()
                 else:
                     logger.warning(f"API HTTP Hata Kodu ({response.status}) - URL: {url}")
+        except asyncio.TimeoutError:
+            logger.error(f"API İstek Zaman Aşımı (Timeout - 10s): {url}")
         except Exception as e:
             logger.error(f"API İstek İstisnası ({url}): {e}")
         return None
@@ -164,7 +169,7 @@ class ValorantAPI:
         return await self._get(session, url)
 
 # =====================================================================
-# 4. İSTATİSTİK ANALİZ MOTORU (DÜZELTİLDİ)
+# 4. İSTATİSTİK ANALİZ MOTORU
 # =====================================================================
 
 class StatsEngine:
@@ -215,12 +220,12 @@ class StatsEngine:
                 data["assists"] += stats.get("assists", 0)
                 data["score_sum"] += stats.get("score", 0)
                 
-                # --- Vuruş Bölgeleri (Direct Stats) ---
+                # Vuruş Bölgeleri
                 hs = stats.get("headshots", 0)
                 bs = stats.get("bodyshots", 0)
                 ls = stats.get("legshots", 0)
                 
-                # --- Hasar Hesaplama (damage_made Int/Dict uyumu) ---
+                # Hasar Hesaplama
                 dmg = 0
                 raw_dmg = player.get("damage_made")
                 
@@ -279,7 +284,7 @@ class StatsEngine:
         }
 
 # =====================================================================
-# 5. SAYFALANDIRMA VIEW SIFINLARI
+# 5. SAYFALANDIRMA VIEW SINIFLARI
 # =====================================================================
 
 class StatsPaginationView(discord.ui.View):
@@ -380,13 +385,13 @@ class VTrackerSystem(commands.Cog):
 
     # --- KOMUT 1: /register (Kayıt Olma) ---
     @commands.hybrid_command(name="register", aliases=["kayit"], description="Riot hesabını (İsim#Tag) Discord hesabına bağlar.")
-    async def register_command(self, ctx, *, riot_id: str):
+    async def register_command(self, ctx, *, riot_id: str = None):
         await ctx.defer()
         
-        if "#" not in riot_id or len(riot_id.split("#")) != 2:
+        if not riot_id or "#" not in riot_id or len(riot_id.split("#")) != 2:
             embed = discord.Embed(
                 title="❌ Hatalı Format!",
-                description="Lütfen Riot ID'nizi `OyuncuAdı#Etiket` şeklinde girin.\n**Örnek:** `/register Alperen#TR1`",
+                description="Lütfen Riot ID'nizi `OyuncuAdı#Etiket` şeklinde girin.\n**Örnek:** `/register Alperen#TR1` veya `v!register Alperen#TR1`",
                 color=discord.Color.red()
             )
             return await ctx.send(embed=embed)
@@ -421,7 +426,7 @@ class VTrackerSystem(commands.Cog):
             if not acc_data or not isinstance(acc_data, dict) or "data" not in acc_data:
                 embed = discord.Embed(
                     title="❌ Riot Hesabı Bulunamadı",
-                    description=f"`{clean_riot_id}` isimli oyuncu Valorant sisteminde bulunamadı. Lütfen harf ve etiketlerinizi kontrol edin.",
+                    description=f"`{clean_riot_id}` isimli oyuncu Valorant sisteminde bulunamadı veya sunucu yanıt vermedi. Lütfen etiketlerinizi kontrol edin.",
                     color=discord.Color.red()
                 )
                 return await ctx.send(embed=embed)
@@ -556,28 +561,24 @@ class VTrackerSystem(commands.Cog):
 
         try:
             async with aiohttp.ClientSession() as session:
-                if not target_puuid:
-                    acc_init = await self.api.get_account(session, target_name, target_tag)
-                    if acc_init and isinstance(acc_init, dict) and "data" in acc_init:
-                        acc_init_data = acc_init["data"]
-                        if acc_init_data and isinstance(acc_init_data, dict):
-                            target_puuid = acc_init_data.get("puuid")
-                            target_region = (acc_init_data.get("region") or "eu").lower()
-                            GlobalDatabase.register_user(target_id, target_puuid, target_name, target_tag, target_region, dc_name=ctx.author.name)
-
+                # 1. Hesap Bilgilerini Çek
                 acc = await self.api.get_account(session, target_name, target_tag)
                 if not acc or not isinstance(acc, dict) or "data" not in acc:
-                    return await loading_msg.edit(content="❌ Riot hesabı bulunamadı veya API yanıt vermedi.")
+                    return await loading_msg.edit(content="❌ Riot hesabı bulunamadı veya HenrikDev API yanıt vermedi (Timeout/Limit).")
 
                 account_data = acc.get("data", {})
                 if not account_data or not isinstance(account_data, dict):
                     return await loading_msg.edit(content="❌ Oyuncu bilgileri alınamadı.")
+
+                target_puuid = account_data.get("puuid") or target_puuid
+                target_region = (account_data.get("region") or "eu").lower()
 
                 title = account_data.get("account_title", "Unvansız")
                 level = account_data.get("account_level", 0)
                 card_obj = account_data.get("card")
                 card_large = card_obj.get("large", "") if isinstance(card_obj, dict) else ""
 
+                # 2. Rank/MMR Bilgilerini Çek
                 mmr = await self.api.get_mmr(session, target_region, target_puuid)
                 rank_name, elo = "Derecesiz", 0
                 if mmr and isinstance(mmr, dict) and "data" in mmr:
@@ -588,14 +589,14 @@ class VTrackerSystem(commands.Cog):
                             rank_name = current_data.get("currenttierpatched", "Derecesiz")
                             elo = current_data.get("ranking_in_tier", 0)
 
+                # 3. Son Maç Verilerini Çek
                 matches = await self.api.get_matches(session, target_region, target_puuid, limit=15)
-                match_data = []
-                if matches and isinstance(matches, dict) and "data" in matches:
-                    match_data = matches["data"]
+                match_data = matches.get("data", []) if (matches and isinstance(matches, dict)) else []
 
                 if not match_data or not isinstance(match_data, list):
-                    return await loading_msg.edit(content="❌ Son maç verileri bulunamadı.")
+                    return await loading_msg.edit(content="❌ Son maç verileri bulunamadı veya API yanıt vermedi.")
 
+                # 4. İstatistik Hesaplama
                 stats = StatsEngine.analyze(match_data, target_puuid)
 
                 # ================= PAGE 1: GENEL BAKIŞ =================
@@ -693,7 +694,7 @@ class VTrackerSystem(commands.Cog):
 
         except Exception as e:
             logger.error(f"Stats Hatası: {e}", exc_info=True)
-            await loading_msg.edit(content=f"❌ Hata oluştu: `{e}`")
+            await loading_msg.edit(content=f"❌ İstek işlenirken beklenmeyen bir hata oluştu: `{e}`")
 
 async def setup(bot):
     await bot.add_cog(VTrackerSystem(bot))
