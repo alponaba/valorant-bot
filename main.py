@@ -14,6 +14,10 @@ app = Flask('')
 def home():
   return render_template('index.html')
 
+@app.route('/.well-known/discord')
+def discord_verify():
+    return "dh=aa44aef03e80a8df234ab8c0ad0b12b8de94375c"
+
 def run_flask():
     app.run(host='0.0.0.0', port=8080)
 
