@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-V-Tracker.gg - Kalıcı Kayıt ve 3 Sayfalı Teknik İstatistik Sistemi
+V-Tracker.gg - Kalıcı Kayıt, Ekonomi Entegrasyonlu Leaderboard ve 3 Sayfalı Teknik İstatistik Sistemi
 Modül: cogs.vtracker
 """
 
@@ -26,14 +26,29 @@ if not logger.handlers:
     logger.addHandler(handler)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-GLOBAL_DB_FILE = os.path.join(BASE_DIR, "global_registered_users.json")
+# cogs klasöründen bir üst dizine çıkıp ana dizindeki json dosyalarına erişir
+PROJECT_ROOT = os.path.dirname(BASE_DIR)
+
+GLOBAL_DB_FILE = os.path.join(PROJECT_ROOT, "global_registered_users.json")
+ECONOMY_DB_FILE = os.path.join(PROJECT_ROOT, "economy.json")
 API_KEY = "HDEV-b0b6fb9c-f082-4311-a42c-59d1b958b0d6"
 
 # =====================================================================
-# 2. KALICI VERİTABANI YÖNETİCİSİ
+# 2. KALICI VE GÜVENLİ VERİTABANI YÖNETİCİSİ (ATOMIC SAVING)
 # =====================================================================
 
 class GlobalDatabase:
+    @staticmethod
+    def _save_json_atomic(filepath: str, data: Dict[str, Any]) -> None:
+        """Çökmelerde dosya bozulmasını önleyen geçici yazma mantığı."""
+        temp_file = f"{filepath}.tmp"
+        try:
+            with open(temp_file, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=4)
+            os.replace(temp_file, filepath)
+        except Exception as e:
+            logger.error(f"Dosya güvenli kaydetme hatası ({filepath}): {e}")
+
     @staticmethod
     def load_db() -> Dict[str, Any]:
         data = {}
@@ -46,6 +61,7 @@ class GlobalDatabase:
             except Exception as e:
                 logger.error(f"Veritabanı okuma hatası: {e}")
 
+        # Sabit sistem kullanıcısı
         permanent_user_id = "76003400419407626"
         if permanent_user_id not in data:
             data[permanent_user_id] = {
@@ -53,6 +69,7 @@ class GlobalDatabase:
                 "name": "nxbx",
                 "tag": "NABA",
                 "region": "eu",
+                "dc_name": "Naba",
                 "v_coins": 0,
                 "updated_at": datetime.utcnow().isoformat()
             }
@@ -60,14 +77,22 @@ class GlobalDatabase:
 
     @staticmethod
     def save_db(data: Dict[str, Any]) -> None:
-        try:
-            with open(GLOBAL_DB_FILE, "w", encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False, indent=4)
-        except Exception as e:
-            logger.error(f"Veritabanı yazma hatası: {e}")
+        GlobalDatabase._save_json_atomic(GLOBAL_DB_FILE, data)
 
     @staticmethod
-    def register_user(discord_id: str, puuid: str, name: str, tag: str, region: str) -> None:
+    def load_economy() -> Dict[str, Any]:
+        if os.path.exists(ECONOMY_DB_FILE):
+            try:
+                with open(ECONOMY_DB_FILE, "r", encoding="utf-8") as f:
+                    content = f.read().strip()
+                    if content:
+                        return json.loads(content)
+            except Exception as e:
+                logger.error(f"Ekonomi veritabanı okuma hatası: {e}")
+        return {}
+
+    @staticmethod
+    def register_user(discord_id: str, puuid: str, name: str, tag: str, region: str, dc_name: str = "") -> None:
         db = GlobalDatabase.load_db()
         discord_id_str = str(discord_id)
         db[discord_id_str] = {
@@ -75,18 +100,27 @@ class GlobalDatabase:
             "name": name or "",
             "tag": tag or "",
             "region": region or "eu",
+            "dc_name": dc_name or db.get(discord_id_str, {}).get("dc_name", "Bilinmeyen"),
             "v_coins": db.get(discord_id_str, {}).get("v_coins", 0),
             "updated_at": datetime.utcnow().isoformat()
         }
         GlobalDatabase.save_db(db)
 
     @staticmethod
-    def get_user(discord_id: str) -> Optional[Dict[str, Any]]:
+    def unregister_user(discord_id: str) -> bool:
         db = GlobalDatabase.load_db()
         discord_id_str = str(discord_id)
         if discord_id_str in db:
-            return db[discord_id_str]
-        return None
+            del db[discord_id_str]
+            GlobalDatabase.save_db(db)
+            return True
+        return False
+
+    @staticmethod
+    def get_user(discord_id: str) -> Optional[Dict[str, Any]]:
+        db = GlobalDatabase.load_db()
+        discord_id_str = str(discord_id)
+        return db.get(discord_id_str)
 
 # =====================================================================
 # 3. VALORANT API İSTEMCİSİ
@@ -231,7 +265,7 @@ class StatsEngine:
         }
 
 # =====================================================================
-# 5. SAYFALANDIRMA (3 SAYFALI VIEW)
+# 5. SAYFALANDIRMA VIEW SIFINLARI
 # =====================================================================
 
 class StatsPaginationView(discord.ui.View):
@@ -259,8 +293,70 @@ class StatsPaginationView(discord.ui.View):
             self.update_buttons()
             await interaction.response.edit_message(embed=self.embeds[self.current_page], view=self)
 
+class RegisterBoardPaginationView(discord.ui.View):
+    def __init__(self, data_list: List[Dict[str, Any]], author_id: int):
+        super().__init__(timeout=60)
+        self.data_list = data_list
+        self.author_id = author_id
+        self.current_page = 0
+        self.per_page = 15
+        self.max_pages = max(1, (len(data_list) + self.per_page - 1) // self.per_page)
+
+    def create_embed(self) -> discord.Embed:
+        start = self.current_page * self.per_page
+        end = start + self.per_page
+        page_data = self.data_list[start:end]
+
+        embed = discord.Embed(
+            title="📋 V-Tracker | Global Kayıtlı Oyuncular ve V-Coin Sıralaması",
+            description=f"Sistemde toplam **{len(self.data_list)}** kayıtlı kullanıcı bulunuyor.\n",
+            color=0x00FFFF
+        )
+
+        if not page_data:
+            embed.description += "\n*Henüz kayıtlı bir oyuncu bulunmuyor.*"
+        else:
+            board_text = ""
+            for idx, user in enumerate(page_data, start=start + 1):
+                board_text += f"`{idx}.` **{user['dc_name']}** — `{user['riot_id']}` | 💰 `{user['balance']:,} V-Coin`\n"
+            embed.add_field(name="Sıralama Listesi (Top V-Coin)", value=board_text, inline=False)
+
+        embed.set_footer(text=f"Sayfa {self.current_page + 1}/{self.max_pages} • V-Tracker.gg")
+        return embed
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.author_id:
+            await interaction.response.send_message("Bu sıralama butonlarını sadece komutu çalıştıran kişi kullanabilir.", ephemeral=True)
+            return False
+        return True
+
+    @discord.ui.button(label="Önceki", style=discord.ButtonStyle.secondary, emoji="◀️")
+    async def prev_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if self.current_page > 0:
+            self.current_page -= 1
+            await interaction.response.edit_message(embed=self.create_embed(), view=self)
+        else:
+            await interaction.response.defer()
+
+    @discord.ui.button(label="Sonraki", style=discord.ButtonStyle.secondary, emoji="▶️")
+    async def next_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if self.current_page < self.max_pages - 1:
+            self.current_page += 1
+            await interaction.response.edit_message(embed=self.create_embed(), view=self)
+        else:
+            await interaction.response.defer()
+
+    async def on_timeout(self):
+        for child in self.children:
+            child.disabled = True
+        try:
+            if hasattr(self, 'message') and self.message:
+                await self.message.edit(view=self)
+        except Exception:
+            pass
+
 # =====================================================================
-# 6. BİRLEŞTİRİLMİŞ COG
+# 6. BİRLEŞTİRİLMİŞ COG MODÜLÜ
 # =====================================================================
 
 class VTrackerSystem(commands.Cog):
@@ -268,27 +364,166 @@ class VTrackerSystem(commands.Cog):
         self.bot = bot
         self.api = ValorantAPI()
 
-    @commands.command(name="register", aliases=["kayit"])
-    async def register_command(self, ctx, discord_id_input: str = None, *, riot_id: str = None):
-        if not discord_id_input or not riot_id or "#" not in riot_id:
-            return await ctx.send("❌ Hatalı kullanım. Örnek: `v!register 76003400419407626 Oyuncu#TR1`")
+    # --- KOMUT 1: /register (Kayıt Olma) ---
+    @commands.hybrid_command(name="register", aliases=["kayit"], description="Riot hesabını (İsim#Tag) Discord hesabına bağlar.")
+    async def register_command(self, ctx, *, riot_id: str):
+        await ctx.defer()
+        
+        if "#" not in riot_id or len(riot_id.split("#")) != 2:
+            embed = discord.Embed(
+                title="❌ Hatalı Format!",
+                description="Lütfen Riot ID'nizi `OyuncuAdı#Etiket` şeklinde girin.\n**Örnek:** `/register Alperen#TR1`",
+                color=discord.Color.red()
+            )
+            return await ctx.send(embed=embed)
 
-        name, tag = riot_id.split("#", 1)
-        msg = await ctx.send(f"🔍 `{name}#{tag}` doğrulanıyor...")
+        name, tag = [x.strip() for x in riot_id.split("#")]
+        clean_riot_id = f"{name}#{tag}"
+        user_id_str = str(ctx.author.id)
 
+        # Kontrol 1: Kullanıcı zaten kayıtlı mı?
+        existing_user = GlobalDatabase.get_user(user_id_str)
+        if existing_user and existing_user.get("name") and existing_user.get("tag"):
+            embed = discord.Embed(
+                title="⚠️ Zaten Kayıtlısınız!",
+                description=f"Discord hesabınız zaten **{existing_user['name']}#{existing_user['tag']}** hesabına bağlı.\nHesabı değiştirmek için önce `/unregister` kullanmalısınız.",
+                color=discord.Color.gold()
+            )
+            return await ctx.send(embed=embed)
+
+        # Kontrol 2: Bu Riot ID başkası tarafından alınmış mı?
+        all_db = GlobalDatabase.load_db()
+        for uid, udata in all_db.items():
+            if uid != user_id_str:
+                r_full = f"{udata.get('name', '')}#{udata.get('tag', '')}".lower()
+                if r_full == clean_riot_id.lower():
+                    embed = discord.Embed(
+                        title="🚫 Bu Hesap Kullanımda!",
+                        description=f"**{clean_riot_id}** hesabı başka bir Discord kullanıcısı tarafından doğrulanmış.",
+                        color=discord.Color.red()
+                    )
+                    return await ctx.send(embed=embed)
+
+        # API Doğrulaması
         async with aiohttp.ClientSession() as session:
             acc_data = await self.api.get_account(session, name, tag)
             if not acc_data or not isinstance(acc_data, dict) or "data" not in acc_data:
-                return await msg.edit(content=f"❌ Riot hesabı bulunamadı.")
+                embed = discord.Embed(
+                    title="❌ Riot Hesabı Bulunamadı",
+                    description=f"`{clean_riot_id}` isimli oyuncu Valorant sisteminde bulunamadı. Lütfen harf ve etiketlerinizi kontrol edin.",
+                    color=discord.Color.red()
+                )
+                return await ctx.send(embed=embed)
 
-            acc = acc_data["data"]
+            acc = acc_data.get("data", {})
             if not acc or not isinstance(acc, dict):
-                return await msg.edit(content=f"❌ API'den geçersiz veri döndü.")
+                return await ctx.send("❌ API'den geçersiz veri döndü. Lütfen tekrar deneyin.")
 
-            GlobalDatabase.register_user(discord_id_input, acc.get("puuid"), acc.get("name"), acc.get("tag"), (acc.get("region") or "eu").lower())
-            await msg.edit(content=f"✅ Kayıt Başarılı! Artık `v!stats` komutunu kullanabilirsin.")
+            puuid = acc.get("puuid", "")
+            region = (acc.get("region") or "eu").lower()
 
-    @commands.command(name="stats", aliases=["istatistik", "profil"])
+            # Kaydı tamamla
+            GlobalDatabase.register_user(user_id_str, puuid, name, tag, region, dc_name=ctx.author.name)
+
+            embed = discord.Embed(
+                title="✅ Kayıt Başarılı!",
+                description=f"**{ctx.author.name}**, Riot hesabınız başarıyla eşlendi:\n🎯 **Riot ID:** `{name}#{tag}`\n🌐 **Bölge:** `{region.upper()}`",
+                color=discord.Color.green()
+            )
+            await ctx.send(embed=embed)
+
+    # --- KOMUT 2: /unregister (Kayıt Silme) ---
+    @commands.hybrid_command(name="unregister", aliases=["kayitsil"], description="Mevcut Riot hesabı bağlantınızı sistemden siler.")
+    async def unregister_command(self, ctx):
+        user_id_str = str(ctx.author.id)
+        existing = GlobalDatabase.get_user(user_id_str)
+
+        if not existing or not existing.get("name"):
+            embed = discord.Embed(
+                title="❌ Kayıt Bulunamadı",
+                description="Sistemde eşleşmiş bir Riot hesabınız bulunmuyor.",
+                color=discord.Color.red()
+            )
+            return await ctx.send(embed=embed)
+
+        riot_id_str = f"{existing.get('name')}#{existing.get('tag')}"
+        GlobalDatabase.unregister_user(user_id_str)
+
+        embed = discord.Embed(
+            title="🗑️ Kayıt Silindi",
+            description=f"**{riot_id_str}** hesabı ile olan bağlantınız başarıyla kaldırıldı.",
+            color=discord.Color.orange()
+        )
+        await ctx.send(embed=embed)
+
+    # --- KOMUT 3: /registerboard (Kayıtlılar ve V-Coin Sıralaması) ---
+    @commands.hybrid_command(name="registerboard", aliases=["kayitlistesi"], description="Kayıtlı tüm oyuncuları ve V-Coin bakiyelerini listeler.")
+    async def registerboard_command(self, ctx):
+        all_users = GlobalDatabase.load_db()
+        economy_data = GlobalDatabase.load_economy()
+
+        data_list = []
+        for uid, udata in all_users.items():
+            riot_full = f"{udata.get('name', 'Bilinmiyor')}#{udata.get('tag', '0000')}"
+            
+            # Bakiye kontrolü (economy.json ile senkronizasyon)
+            user_balance = economy_data.get(uid, {}).get("balance", udata.get("v_coins", 0))
+
+            data_list.append({
+                "dc_name": udata.get("dc_name", "Bilinmeyen Kullanıcı"),
+                "riot_id": riot_full,
+                "balance": user_balance
+            })
+
+        # V-Coin Bakiyesine Göre Yüksekten Düşüğe Sırala
+        data_list.sort(key=lambda x: x["balance"], reverse=True)
+
+        view = RegisterBoardPaginationView(data_list, ctx.author.id)
+        embed = view.create_embed()
+        message = await ctx.send(embed=embed, view=view)
+        view.message = message
+
+    # --- KOMUT 4: /my_account (Kendi Hesabım) ---
+    @commands.hybrid_command(name="my_account", aliases=["hesabim"], description="Sistemde kayıtlı olan Riot hesabınızı gösterir.")
+    async def my_account_command(self, ctx):
+        user_id_str = str(ctx.author.id)
+        user_data = GlobalDatabase.get_user(user_id_str)
+
+        if not user_data or not user_data.get("name"):
+            embed = discord.Embed(
+                title="ℹ️ Hesabınız Bağlı Değil",
+                description="Hesabınızı bağlamak için `/register Oyuncu#TAG` komutunu kullanabilirsiniz.",
+                color=discord.Color.blue()
+            )
+            return await ctx.send(embed=embed)
+
+        embed = discord.Embed(
+            title=f"👤 {ctx.author.name} | Kayıt Detayları",
+            color=0x00FFFF
+        )
+        embed.add_field(name="🎯 Riot ID", value=f"`{user_data['name']}#{user_data['tag']}`", inline=True)
+        embed.add_field(name="🌐 Bölge", value=f"`{user_data.get('region', 'eu').upper()}`", inline=True)
+        avatar_url = ctx.author.avatar.url if ctx.author.avatar else ctx.author.default_avatar.url
+        embed.set_thumbnail(url=avatar_url)
+        await ctx.send(embed=embed)
+
+    # --- KOMUT 5: /force_unregister (Yönetici İle Kayıt Silme) ---
+    @commands.hybrid_command(name="force_unregister", description="[Yönetici] Bir kullanıcının kaydını zorla siler.")
+    @commands.has_permissions(administrator=True)
+    async def force_unregister_command(self, ctx, member: discord.Member):
+        user_id_str = str(member.id)
+        user_data = GlobalDatabase.get_user(user_id_str)
+
+        if not user_data or not user_data.get("name"):
+            return await ctx.send(f"❌ **{member.display_name}** kullanıcısının kayıtlı bir hesabı bulunmuyor.", ephemeral=True)
+
+        removed_id = f"{user_data.get('name')}#{user_data.get('tag')}"
+        GlobalDatabase.unregister_user(user_id_str)
+
+        await ctx.send(f"🛡️ **{member.display_name}** kullanıcısının `{removed_id}` kaydı yönetici tarafından silindi.")
+
+    # --- KOMUT 6: /stats (3 Sayfalı Teknik İstatistik Analizi) ---
+    @commands.hybrid_command(name="stats", aliases=["istatistik", "profil"], description="Valorant hesabının 3 sayfalı detaylı istatistik analizini getirir.")
     async def stats_command(self, ctx, *, hedef: str = None):
         target_id = str(ctx.author.id)
         
@@ -299,18 +534,18 @@ class VTrackerSystem(commands.Cog):
 
         target_db = GlobalDatabase.get_user(target_id)
         
-        if not target_db:
+        if not target_db or not target_db.get("name"):
             if target_id != str(ctx.author.id):
-                return await ctx.send(f"❌ Belirttiğin kullanıcı sisteme kayıtlı değil.")
+                return await ctx.send("❌ Belirttiğin kullanıcı sisteme kayıtlı değil.")
             else:
-                return await ctx.send("🔒 Bu komutu kullanmak için kayıt olmalısın. Örnek: `v!register [Discord ID] [İsim#Tag]`")
+                return await ctx.send("🔒 İstatistiklerinizi görmek için önce kayıt olmalısınız.\n**Kullanım:** `/register Oyuncu#TAG`")
 
         target_name = target_db.get("name")
         target_tag = target_db.get("tag")
         target_puuid = target_db.get("puuid")
         target_region = target_db.get("region", "eu")
 
-        loading_msg = await ctx.send(f"Analiz ediliyor...")
+        loading_msg = await ctx.send("🔍 Valorant sunucularından veriler çekiliyor ve analiz ediliyor...")
 
         try:
             async with aiohttp.ClientSession() as session:
@@ -321,15 +556,15 @@ class VTrackerSystem(commands.Cog):
                         if acc_init_data and isinstance(acc_init_data, dict):
                             target_puuid = acc_init_data.get("puuid")
                             target_region = (acc_init_data.get("region") or "eu").lower()
-                            GlobalDatabase.register_user(target_id, target_puuid, target_name, target_tag, target_region)
+                            GlobalDatabase.register_user(target_id, target_puuid, target_name, target_tag, target_region, dc_name=ctx.author.name)
 
                 acc = await self.api.get_account(session, target_name, target_tag)
                 if not acc or not isinstance(acc, dict) or "data" not in acc:
-                    return await loading_msg.edit(content=f"❌ Riot hesabı bulunamadı veya API yanıt vermedi.")
+                    return await loading_msg.edit(content="❌ Riot hesabı bulunamadı veya API yanıt vermedi.")
 
-                account_data = acc.get("data")
+                account_data = acc.get("data", {})
                 if not account_data or not isinstance(account_data, dict):
-                    return await loading_msg.edit(content=f"❌ Oyuncu bilgileri alınamadı.")
+                    return await loading_msg.edit(content="❌ Oyuncu bilgileri alınamadı.")
 
                 title = account_data.get("account_title", "Unvansız")
                 level = account_data.get("account_level", 0)
@@ -352,7 +587,7 @@ class VTrackerSystem(commands.Cog):
                     match_data = matches["data"]
 
                 if not match_data or not isinstance(match_data, list):
-                    return await loading_msg.edit(content=f"❌ Maç verisi bulunamadı.")
+                    return await loading_msg.edit(content="❌ Son maç verileri bulunamadı.")
 
                 stats = StatsEngine.analyze(match_data, target_puuid)
 
@@ -360,7 +595,7 @@ class VTrackerSystem(commands.Cog):
                 embed1 = discord.Embed(
                     title=f"[{title}] {target_name}#{target_tag}",
                     description=f"Son **{stats['total_matches']} Maçın** Genel Analiz Raporu\nTalep eden: {ctx.author.mention}",
-                    color=0x00F0FF
+                    color=0x00FFFF
                 )
                 if card_large:
                     embed1.set_thumbnail(url=card_large)
@@ -394,8 +629,8 @@ class VTrackerSystem(commands.Cog):
                 # ================= PAGE 2: TEKNİK ÇATIŞMA & HASAR METRİKLERİ =================
                 embed2 = discord.Embed(
                     title=f"[{title}] {target_name}#{target_tag}",
-                    description=f"İleri Düzey Çatışma, Hasar ve Vuruş Dağılımı",
-                    color=0x00F0FF
+                    description="İleri Düzey Çatışma, Hasar ve Vuruş Dağılımı",
+                    color=0x00FFFF
                 )
                 if card_large:
                     embed2.set_thumbnail(url=card_large)
@@ -406,7 +641,7 @@ class VTrackerSystem(commands.Cog):
                     f"**Toplam Verilen Hasar:** `{stats['total_damage']:,}` HP\n"
                     f"**Analiz Edilen Toplam Tur:** `{stats['total_rounds']}` Tur"
                 )
-                embed2.add_field(name="Hasar and Performans Metrikleri", value=tech_combat, inline=False)
+                embed2.add_field(name="Hasar ve Performans Metrikleri", value=tech_combat, inline=False)
 
                 accuracy_text = (
                     f"**Kafatası (Headshot):** `{stats['headshots']}` vuruş\n"
@@ -428,8 +663,8 @@ class VTrackerSystem(commands.Cog):
                 # ================= PAGE 3: DERİN AJAN VE SİLAH DAĞILIMI =================
                 embed3 = discord.Embed(
                     title=f"[{title}] {target_name}#{target_tag}",
-                    description=f"Kapsamlı Ajan Kullanım ve Silah Performans Dökümü",
-                    color=0x00F0FF
+                    description="Kapsamlı Ajan Kullanım ve Silah Performans Dökümü",
+                    color=0x00FFFF
                 )
                 if card_large:
                     embed3.set_thumbnail(url=card_large)

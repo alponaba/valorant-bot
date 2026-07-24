@@ -31,22 +31,22 @@ class Help(commands.Cog):
                 "Sıradan bir stat botundan çok daha fazlası. V-Tracker; ajan analizlerinden "
                 "özel koçluk sistemine, sunucu moderasyonundan kendi ekonomi sistemine kadar "
                 "Discord sunucunu tam donanımlı bir Valorant merkezine çevirir.\n\n"
-                "Aşağıdan botun modüllerine ve komutlarına göz atabilirsin:"
+                "Aşağıdan botun modüllerine ve komutlarına göz atabilirsin:(v! prefixini kullanmayı unutma)"
             ),
-            color=discord.Color(0x00FFFF)  # Cyan Rengi (Düzeltildi)
+            color=discord.Color(0x00FFFF)  # Cyan Rengi 
         )
         
         # cogs klasöründeki: vtracker.py, agents.py, compare.py
         embed.add_field(
             name="📊 İstatistik & Analiz",
-            value="`stats`, `match`, `profile` - Oyuncu verilerini ve maç geçmişini getirir.\n`agents`, `compare` - Ajan bazlı istatistikler ve oyuncu karşılaştırmaları.",
+            value="`stats`, `match`, `profile` - Oyuncu verilerini ve maç geçmişini getirir `v!stats(ilk önce kayıt olun)`.\n`agents`, `compare` - Ajan bazlı istatistikler ve oyuncu karşılaştırmaları.",
             inline=False
         )
         
         # cogs klasöründeki: coach.py, custom_coach.py, counter_strat.py, comps.py
         embed.add_field(
             name="🧠 Koçluk & Taktik",
-            value="`coach`, `custom_coach` - Kişiselleştirilmiş oyun içi tavsiyeler verir.\n`counter_strat`, `comps` - Rakibe karşı anti-strateji ve takım kompozisyonları.",
+            value="`coach`, `custom_coach` - Kişiselleştirilmiş oyun içi tavsiyeler verir`v!customcoach,v!coach`.\n`counter_strat`, `comps` - Rakibe karşı anti-strateji ve takım kompozisyonları.`v!counterstrat`",
             inline=False
         )
 
@@ -60,14 +60,14 @@ class Help(commands.Cog):
         # cogs klasöründeki: moderasyon.py, security.py, setup_server.py, temp_voice.py
         embed.add_field(
             name="🛡️ Sunucu Yönetimi",
-            value="`setup_server`, `moderasyon` - Hızlı sunucu kurulumu ve denetimi.\n`security`, `temp_voice` - Güvenlik ayarları ve geçici ses kanalları (Temp VC).",
+            value="`setup_server`, `moderasyon` - Hızlı sunucu kurulumu ve denetimi.`kick,mute,ban,lockdown gibi komutlar`\n`security`, `temp_voice` - Güvenlik ayarları ve geçici ses kanalları (Temp VC).",
             inline=False
         )
         
         # cogs klasöründeki: autojoin.py, suggestion.py, tts.py
         embed.add_field(
             name="✨ Ekstra Araçlar",
-            value="`autojoin`, `tts` - Sesli sohbet araçları ve metin okuma (Text-to-Speech).\n`suggestion` - Sunucu üyeleri için öneri/istek sistemi.",
+            value="`autojoin`, `tts` - Sesli sohbet araçları ve metin okuma (Text-to-Speech).\n`suggestion` - Sunucu üyeleri için öneri/istek sistemi.`v!suggestion bot/sunucu ...`",
             inline=False
         )
         
