@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-V-Tracker.gg - Otomatik Güvenlik & Doğrulama Modülü (V + 4 Rakam Uyumlu)
+V-Tracker.gg - Riot OAuth2 (RSO) Güvenli Doğrulama Modülü
 """
 
 import discord
@@ -9,17 +9,24 @@ import aiohttp
 import asyncio
 import json
 import os
-import random
 import logging
-import urllib.parse
+from fastapi import FastAPI, Request
+import uvicorn
+import threading
 
-logger = logging.getLogger("V-Tracker-Security")
+logger = logging.getLogger("V-Tracker-RSO")
+
+# --- RIOT DEVELOPER BILGILERINI BURAYA GIR ---
+CLIENT_ID = "SENIN_RIOT_CLIENT_ID"
+CLIENT_SECRET = "SENIN_RIOT_CLIENT_SECRET"
+REDIRECT_URI = "http://localhost:8000/auth/callback"  # Canlıya alınca kendi domain/ip adresini yazmalısın
+# ---------------------------------------------
 
 file_lock = asyncio.Lock()
 
 class SecureAuthDatabase:
     USERS_FILE = "global_registered_users.json"
-    CHALLENGES_FILE = "vtracker_challenges.json"
+    PENDING_FILE = "vtracker_rso_pending.json"
 
     @classmethod
     async def load_json(cls, filename):
@@ -47,126 +54,126 @@ class SecureAuthDatabase:
                 if os.path.exists(temp_filename):
                     os.remove(temp_filename)
 
-class AutomatedSecuritySystem(commands.Cog):
+# FastAPI Web Sunucusu (Riot Callback'leri yakalamak için)
+app = FastAPI()
+
+@app.get("/auth/callback")
+async def riot_callback(code: str, state: str):
+    """
+    Riot giriş yaptıktan sonra kullanıcıyı bu adrese yönlendirir.
+    state parametresi Discord User ID'sini tutar.
+    """
+    discord_user_id = state
+    
+    # 1. Authorization Code ile Riot Token Alma
+    token_url = "https://auth.riotgames.com/token"
+    headers = {"Content-Type": "application/x-www-form-urlencoded"}
+    payload = {
+        "grant_type": "authorization_code",
+        "client_id": CLIENT_ID,
+        "client_secret": CLIENT_SECRET,
+        "redirect_uri": REDIRECT_URI,
+        "code": code
+    }
+
+    async with aiohttp.ClientSession() as session:
+        async with session.post(token_url, headers=headers, data=payload) as resp:
+            if resp.status != 200:
+                return {"error": "Riot token alınamadı."}
+            token_data = await resp.json()
+            access_token = token_data.get("access_token")
+
+        # 2. Access Token ile Kullanıcı Bilgilerini (PUUID) Çekme
+        userinfo_url = "https://auth.riotgames.com/userinfo"
+        auth_headers = {"Authorization": f"Bearer {access_token}"}
+        async with session.get(userinfo_url, headers=auth_headers) as resp:
+            if resp.status != 200:
+                return {"error": "Kullanıcı bilgileri alınamadı."}
+            user_info = await resp.json()
+            puuid = user_info.get("sub")
+            region = user_info.get("region", "eu").lower()
+
+        # 3. HenrikDev API üzerinden güncel Riot ID (İsim#Tag) öğrenme
+        account_url = f"https://api.henrikdev.xyz/valorant/v1/by-puuid/account/{puuid}"
+        async with session.get(account_url) as resp:
+            if resp.status != 200:
+                return {"error": "Riot hesap detayları çözülemedi."}
+            acc_json = await resp.json()
+            acc_data = acc_json.get("data", {})
+            name = acc_data.get("name", "Bilinmiyor")
+            tag = acc_data.get("tag", "TR1")
+
+    # 4. Veritabanına Kaydetme (Mevcut V-Coin ve kozmetikleri koruyarak)
+    users = await SecureAuthDatabase.load_json(SecureAuthDatabase.USERS_FILE)
+    
+    existing_cosmetics = users.get(discord_user_id, {}).get("cosmetics", {
+        "color": "0x00FFFF", "emoji": "", "banner": "", "gif": "", "unlocked": []
+    })
+    existing_coins = users.get(discord_user_id, {}).get("v_coins", 0)
+
+    users[discord_user_id] = {
+        "puuid": puuid,
+        "name": name,
+        "tag": tag,
+        "region": region,
+        "dc_name": "DiscordUser", # İsteğe bağlı güncellenebilir
+        "v_coins": existing_coins,
+        "cosmetics": existing_cosmetics
+    }
+    await SecureAuthDatabase.save_json(SecureAuthDatabase.USERS_FILE, users)
+
+    # Şık bir HTML başarı sayfası döndür
+    return HTMLResponse(content="""
+        <html>
+            <body style="background-color: #0f1923; color: #ff4655; font-family: Arial, sans-serif; text-align: center; padding-top: 100px;">
+                <h1>🎉 Hesap Başarıyla Doğrulandı!</h1>
+                <p style="color: #ece8e1;">V-Tracker hesabınız güvenle eşleştirildi. Bu pencereyi kapatıp Discord'a dönebilirsiniz.</p>
+            </body>
+        </html>
+    """)
+
+from fastapi.responses import HTMLResponse
+
+def run_fastapi():
+    uvicorn.run(app, host="0.0.0.0", port=8000, log_level="warning")
+
+
+class RiotOAuthSystem(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.headers = {"User-Agent": "V-Tracker-Bot/8.0", "Authorization": "HDEV-b0b6fb9c-f082-4311-a42c-59d1b958b0d6"}
+        # FastAPI sunucusunu arka planda (daemon thread olarak) başlatıyoruz
+        threading.Thread(target=run_fastapi, daemon=True).start()
 
-    @commands.hybrid_command(name="dogrula", description="Riot hesabınızın size ait olduğunu 5 haneli tag kodu ile doğrular.")
+    @commands.hybrid_command(name="dogrula", description="Riot hesabınızı güvenli RSO altyapısı ile resmi olarak bağlar.")
     @commands.cooldown(1, 10, commands.BucketType.user)
-    async def dogrula(self, ctx, *, riot_id: str = None):
-        if not riot_id or "#" not in riot_id or len(riot_id.split("#")) != 2:
-            return await ctx.send("❌ Hatalı format! Örnek kullanım: `v!dogrula OyuncuAdı#TR1`")
-
-        name, tag = [x.strip() for x in riot_id.split("#")]
+    async def dogrula(self, ctx):
         user_id = str(ctx.author.id)
 
         users = await SecureAuthDatabase.load_json(SecureAuthDatabase.USERS_FILE)
-        if user_id in users and users[user_id].get("name"):
+        if user_id in users and users[user_id].get("puuid"):
             return await ctx.send("⚠️ Zaten doğrulanmış ve sisteme bağlı bir Riot hesabın var! Değiştirmek için önce `v!unregister` kullanmalısın.")
 
-        encoded_name = urllib.parse.quote(name, safe='')
-        encoded_tag = urllib.parse.quote(tag, safe='')
-        url = f"https://api.henrikdev.xyz/valorant/v1/account/{encoded_name}/{encoded_tag}"
-
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, headers=self.headers) as resp:
-                if resp.status != 200:
-                    return await ctx.send("❌ Riot hesabı bulunamadı! İsim ve etiketini doğru yazdığından emin ol.")
-                data = await resp.json()
-                acc_data = data.get("data", {})
-
-        puuid = acc_data.get("puuid")
-        
-        for uid, udata in users.items():
-            if udata.get("puuid") == puuid:
-                return await ctx.send("❌ Bu Riot hesabı zaten başka bir Discord kullanıcısı tarafından doğrulanmış!")
-
-        # V harfi + 4 rakam (Örn: V4829 - Tam 5 karakter, Riot tag sınırına birebir uygun)
-        challenge_code = f"V{random.randint(1000, 9999)}"
-
-        challenges = await SecureAuthDatabase.load_json(SecureAuthDatabase.CHALLENGES_FILE)
-        challenges[user_id] = {
-            "puuid": puuid,
-            "region": (acc_data.get("region") or "eu").lower(),
-            "name": acc_data.get("name"),
-            "tag": acc_data.get("tag"),
-            "code": challenge_code
-        }
-        await SecureAuthDatabase.save_json(SecureAuthDatabase.CHALLENGES_FILE, challenges)
+        # Riot OAuth Giriş Linki (state parametresine Discord User ID'sini ekliyoruz)
+        auth_url = (
+            f"https://auth.riotgames.com/authorize?"
+            f"client_id={CLIENT_ID}&"
+            f"redirect_uri={REDIRECT_URI}&"
+            f"response_type=code&"
+            f"scope=openid&"
+            f"state={user_id}"
+        )
 
         embed = discord.Embed(
-            title="🛡️ Otomatik Riot Hesap Doğrulama",
-            description=f"**{acc_data.get('name')}#{acc_data.get('tag')}** hesabının sana ait olduğunu doğrulamamız gerekiyor.\n\n"
-                        f"🔑 **Doğrulama Tag Kodun:** `{challenge_code}`\n\n"
-                        f"**Nasıl Onaylayacaksın?**\n"
-                        f"1. Riot Games hesabına web üzerinden giriş yap.\n"
-                        f"2. Profilindeki **Tag / Etiket** kısmını geçici olarak **`{challenge_code}`** yapın (5 karakter sınırına tam uyar).\n"
-                        f"3. Kodunu tag kısmına kaydettikten sonra **`v!onayla`** komutunu yaz!",
-            color=0x00FFFF
+            title="🛡️ Güvenli Riot Hesap Doğrulaması (RSO)",
+            description=(
+                "Hesabınızı eşleştirmek için aşağıdaki resmi Riot Games bağlantısını kullanın.\n\n"
+                "🔒 **Güvence:** Şifreniz asla botumuz tarafından görülmez. İşlem doğrudan **Riot Games'in resmi sunucuları** üzerinden şifrelenmiş olarak gerçekleşir.\n\n"
+                f"👉 **[Resmi Riot Giriş Sayfası için Tıklayın]({auth_url})**"
+            ),
+            color=0xFF4655
         )
-        await ctx.send(embed=embed)
-
-    @commands.hybrid_command(name="onayla", description="Riot tag kısmına eklediğin V+4 haneli kodu kontrol ederek hesabı güvenle bağlar.")
-    @commands.cooldown(1, 5, commands.BucketType.user)
-    async def onayla(self, ctx):
-        user_id = str(ctx.author.id)
-        challenges = await SecureAuthDatabase.load_json(SecureAuthDatabase.CHALLENGES_FILE)
-
-        if user_id not in challenges:
-            return await ctx.send("❌ Aktif bir doğrulama işlemin bulunmuyor. Önce `v!dogrula İsim#Tag` komutunu kullanmalısın.")
-
-        chal_info = challenges[user_id]
-        name = chal_info["name"]
-        tag = chal_info["tag"]
-        region = chal_info["region"]
-        expected_code = chal_info["code"]
-        puuid = chal_info["puuid"]
-
-        encoded_name = urllib.parse.quote(name, safe='')
-        encoded_tag = urllib.parse.quote(tag, safe='')
-        url = f"https://api.henrikdev.xyz/valorant/v1/account/{encoded_name}/{encoded_tag}"
-
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, headers=self.headers) as resp:
-                if resp.status != 200:
-                    return await ctx.send("❌ Riot API'ye ulaşılamadı. Lütfen birkaç dakika sonra tekrar dene.")
-                data = await resp.json()
-                current_acc = data.get("data", {})
-
-        current_tag = current_acc.get("tag", "")
-
-        if expected_code.lower() not in current_tag.lower():
-            return await ctx.send(f"❌ Doğrulama başarısız! Riot tag kısmında **`{expected_code}`** kodunu bulamadık. Lütfen etiketini bu kodla güncellediğinden emin ol ve tekrar dene.")
-
-        challenges.pop(user_id)
-        await SecureAuthDatabase.save_json(SecureAuthDatabase.CHALLENGES_FILE, challenges)
-
-        users = await SecureAuthDatabase.load_json(SecureAuthDatabase.USERS_FILE)
-        
-        existing_cosmetics = users.get(user_id, {}).get("cosmetics", {
-            "color": "0x00FFFF", "emoji": "", "banner": "", "gif": "", "unlocked": []
-        })
-        existing_coins = users.get(user_id, {}).get("v_coins", 0)
-
-        users[user_id] = {
-            "puuid": puuid,
-            "name": name,
-            "tag": tag,
-            "region": region,
-            "dc_name": ctx.author.name,
-            "v_coins": existing_coins,
-            "cosmetics": existing_cosmetics
-        }
-        await SecureAuthDatabase.save_json(SecureAuthDatabase.USERS_FILE, users)
-
-        embed = discord.Embed(
-            title="🎉 Hesap Başarıyla Doğrulandı ve Bağlandı!",
-            description=f"Tebrikler! **{name}#{tag}** hesabı V-Security ile doğrulandı ve Discord hesabınla eşleştirildi.",
-            color=0x00FF00
-        )
-        await ctx.send(embed=embed)
+        await ctx.send(embed=embed, ephemeral=True)
 
 async def setup(bot):
-    await bot.add_cog(AutomatedSecuritySystem(bot))
-    logger.info("Otomatik Güvenlik & Doğrulama Modülü başarıyla yüklendi!")
+    await bot.add_cog(RiotOAuthSystem(bot))
+    logger.info("Riot OAuth2 Güvenlik Modülü başarıyla yüklendi ve Web Sunucusu aktif!")
