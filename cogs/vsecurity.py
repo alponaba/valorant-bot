@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-V-Tracker.gg - Otomatik Riot Hesap Sahipliği Doğrulama Modülü (vsecurity.py)
-Kapsam: OAuth / Challenge Tabanlı Güvenli Otomatik Hesap Eşleştirme
-Geliştirici: AI Assistant & Mustafa Alperen Gözüdok
+V-Tracker.gg - Otomatik Güvenlik & Doğrulama Modülü (Entegre Sürüm)
 """
 
 import discord
@@ -13,13 +11,14 @@ import json
 import os
 import random
 import logging
+import urllib.parse
 
 logger = logging.getLogger("V-Tracker-Security")
 
 file_lock = asyncio.Lock()
 
 class SecureAuthDatabase:
-    USERS_FILE = "vtracker_users.json"
+    USERS_FILE = "global_registered_users.json"  # Ana sistemin ortak veritabanı dosyası
     CHALLENGES_FILE = "vtracker_challenges.json"
 
     @classmethod
@@ -28,10 +27,12 @@ class SecureAuthDatabase:
             return {}
         try:
             with open(filename, "r", encoding="utf-8") as f:
-                return json.load(f)
+                content = f.read().strip()
+                if content:
+                    return json.loads(content)
         except Exception as e:
             logger.error(f"Dosya okuma hatası ({filename}): {e}")
-            return {}
+        return {}
 
     @classmethod
     async def save_json(cls, filename, data):
@@ -49,24 +50,25 @@ class SecureAuthDatabase:
 class AutomatedSecuritySystem(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.headers = {"User-Agent": "V-Tracker-Bot/2.5"}
+        self.headers = {"User-Agent": "V-Tracker-Bot/8.0", "Authorization": "HDEV-b0b6fb9c-f082-4311-a42c-59d1b958b0d6"}
 
-    # --- 1. ADIM: DOĞRULAMA KODU OLUŞTURMA VE BAŞLATMA ---
-    @commands.hybrid_command(name="dogrula", description="Riot hesabınızın size ait olduğunu otomatik doğrular.")
-    async def dogrula(self, ctx, riot_id: str):
-        if "#" not in riot_id:
-            return await ctx.send("❌ Hatalı format! Örnek kullanım: `v!dogrula TenZ#0000`")
+    @commands.hybrid_command(name="dogrula", description="Riot hesabınızın size ait olduğunu otomatik kod ile doğrular.")
+    @commands.cooldown(1, 10, commands.BucketType.user)
+    async def dogrula(self, ctx, *, riot_id: str = None):
+        if not riot_id or "#" not in riot_id or len(riot_id.split("#")) != 2:
+            return await ctx.send("❌ Hatalı format! Örnek kullanım: `v!dogrula OyuncuAdı#TR1`")
 
-        name, tag = riot_id.split("#", 1)
+        name, tag = [x.strip() for x in riot_id.split("#")]
         user_id = str(ctx.author.id)
 
-        # Kullanıcı zaten kayıtlı mı?
         users = await SecureAuthDatabase.load_json(SecureAuthDatabase.USERS_FILE)
-        if user_id in users:
-            return await ctx.send("⚠️ Zaten doğrulanmış ve sisteme bağlı bir Riot hesabın var!")
+        if user_id in users and users[user_id].get("name"):
+            return await ctx.send("⚠️ Zaten doğrulanmış ve sisteme bağlı bir Riot hesabın var! Değiştirmek için önce `v!unregister` kullanmalısın.")
 
-        # Riot hesabının varlığını kontrol et
-        url = f"https://api.henrikdev.xyz/valorant/v1/account/{name}/{tag}"
+        encoded_name = urllib.parse.quote(name, safe='')
+        encoded_tag = urllib.parse.quote(tag, safe='')
+        url = f"https://api.henrikdev.xyz/valorant/v1/account/{encoded_name}/{encoded_tag}"
+
         async with aiohttp.ClientSession() as session:
             async with session.get(url, headers=self.headers) as resp:
                 if resp.status != 200:
@@ -76,19 +78,17 @@ class AutomatedSecuritySystem(commands.Cog):
 
         puuid = acc_data.get("puuid")
         
-        # Başka bir Discord kullanıcısı bu Riot hesabını çoktan bağlamış mı?
+        # Mükerrer PUUID kontrolü (Başka biri bu hesabı bağlamış mı?)
         for uid, udata in users.items():
             if udata.get("puuid") == puuid:
                 return await ctx.send("❌ Bu Riot hesabı zaten başka bir Discord kullanıcısı tarafından doğrulanmış!")
 
-        # Benzersiz Güvenlik Kodu Üret
         challenge_code = f"VTRK-{random.randint(1000, 9999)}"
 
-        # Bekleyen doğrulamalara kaydet
         challenges = await SecureAuthDatabase.load_json(SecureAuthDatabase.CHALLENGES_FILE)
         challenges[user_id] = {
             "puuid": puuid,
-            "region": acc_data.get("region", "eu"),
+            "region": (acc_data.get("region") or "eu").lower(),
             "name": acc_data.get("name"),
             "tag": acc_data.get("tag"),
             "code": challenge_code
@@ -101,14 +101,14 @@ class AutomatedSecuritySystem(commands.Cog):
                         f"🔑 **Doğrulama Kodun:** `{challenge_code}`\n\n"
                         f"**Nasıl Onaylayacaksın?**\n"
                         f"1. Riot Games hesabına web üzerinden giriş yap.\n"
-                        f"2. Profilindeki **Slogan (Tagline)** kısmına veya Riot ID adna geçici olarak bu kodu ekle **VEYA** aşağıdaki butona benzer şekilde doğrula.\n"
+                        f"2. Profilindeki **Riot ID (İsim veya Tagline)** kısmına geçici olarak bu kodu ekle.\n"
                         f"3. Kodunu ekledikten sonra **`v!onayla`** komutunu yaz!",
             color=0x00FFFF
         )
         await ctx.send(embed=embed)
 
-    # --- 2. ADIM: OTOMATİK KOD KONTROLÜ VE TAMAMLAMA ---
-    @commands.hybrid_command(name="onayla", description="Riot profiline eklediğin kodu kontrol ederek hesabı otomatik bağlar.")
+    @commands.hybrid_command(name="onayla", description="Riot profiline eklediğin kodu kontrol ederek hesabı güvenle bağlar.")
+    @commands.cooldown(1, 5, commands.BucketType.user)
     async def onayla(self, ctx):
         user_id = str(ctx.author.id)
         challenges = await SecureAuthDatabase.load_json(SecureAuthDatabase.CHALLENGES_FILE)
@@ -121,9 +121,12 @@ class AutomatedSecuritySystem(commands.Cog):
         tag = chal_info["tag"]
         region = chal_info["region"]
         expected_code = chal_info["code"]
+        puuid = chal_info["puuid"]
 
-        # Riot API'den güncel hesap verisini çekerek kodun eklenip eklenmediğini kontrol et
-        url = f"https://api.henrikdev.xyz/valorant/v1/account/{name}/{tag}"
+        encoded_name = urllib.parse.quote(name, safe='')
+        encoded_tag = urllib.parse.quote(tag, safe='')
+        url = f"https://api.henrikdev.xyz/valorant/v1/account/{encoded_name}/{encoded_tag}"
+
         async with aiohttp.ClientSession() as session:
             async with session.get(url, headers=self.headers) as resp:
                 if resp.status != 200:
@@ -131,35 +134,42 @@ class AutomatedSecuritySystem(commands.Cog):
                 data = await resp.json()
                 current_acc = data.get("data", {})
 
-        # Kontrol: Riot Tagline veya Name içinde güvenlik kodu geçiyor mu?
         current_tag = current_acc.get("tag", "")
         current_name = current_acc.get("name", "")
 
-        # Güvenlik doğrulaması: Kod hesap bilgilerinde bulunmalı
         if expected_code not in current_tag and expected_code not in current_name:
-            return await ctx.send(f"❌ Doğrulama başarısız! Riot profilinde (İsim veya Tagline kısmında) **`{expected_code}`** kodunu bulamadık. Lütfen kodu eklediğinden emin ol ve tekrar dene.")
+            return await ctx.send(f"❌ Doğrulama başarısız! Riot profilinde **`{expected_code}`** kodunu bulamadık. Lütfen kodu eklediğinden emin ol ve tekrar dene.")
 
-        # Doğrulama Başarılı! Kalıcı veritabanına kaydet
+        # Challenge kaydını temizle
         challenges.pop(user_id)
         await SecureAuthDatabase.save_json(SecureAuthDatabase.CHALLENGES_FILE, challenges)
 
+        # Ana veritabanına bağlan (Mevcut V-Coin ve kozmetikleri koruyarak)
         users = await SecureAuthDatabase.load_json(SecureAuthDatabase.USERS_FILE)
+        
+        existing_cosmetics = users.get(user_id, {}).get("cosmetics", {
+            "color": "0x00FFFF", "emoji": "", "banner": "", "gif": "", "unlocked": []
+        })
+        existing_coins = users.get(user_id, {}).get("v_coins", 0)
+
         users[user_id] = {
-            "puuid": chal_info["puuid"],
-            "region": region,
+            "puuid": puuid,
             "name": name,
-            "tag": tag
+            "tag": tag,
+            "region": region,
+            "dc_name": ctx.author.name,
+            "v_coins": existing_coins,
+            "cosmetics": existing_cosmetics
         }
         await SecureAuthDatabase.save_json(SecureAuthDatabase.USERS_FILE, users)
 
         embed = discord.Embed(
-            title="🎉 Hesap Başarıyla Doğrulandı!",
-            description=f"Tebrikler! **{name}#{tag}** hesabı hiçbir yetkili müdahalesine gerek kalmadan tamamen otomatik olarak Discord hesabınla eşleştirildi.",
+            title="🎉 Hesap Başarıyla Doğrulandı ve Bağlandı!",
+            description=f"Tebrikler! **{name}#{tag}** hesabı V-Security ile doğrulandı ve Discord hesabınla eşleştirildi.",
             color=0x00FF00
         )
         await ctx.send(embed=embed)
 
-
 async def setup(bot):
     await bot.add_cog(AutomatedSecuritySystem(bot))
-    logger.info("Otomatik Güvenlik & Doğrulama Modülü (AutomatedSecuritySystem) başarıyla yüklendi!")
+    logger.info("Otomatik Güvenlik & Doğrulama Modülü başarıyla yüklendi!")
