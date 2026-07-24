@@ -1,5 +1,8 @@
 # -*- coding: utf-8 -*-
-
+"""
+V-Tracker.gg - Gelişmiş Özellikler ve Güvenlik Modülü (advanced_features.py)
+Kapsam: Concurrent Write Lock, URL Sanitization, TTL Cache, Otomatik Retry, Otomatik Rol, Dinamik Ödül & Cooldown
+"""
 
 import discord
 from discord.ext import commands
@@ -9,12 +12,13 @@ import json
 import os
 import time
 import random
+import re
 import logging
 
 logger = logging.getLogger("V-Tracker-Features")
 
 # =====================================================================
-# 1. GÜVENLİK 1: EŞ ZAMANLI YAZMA KİLİDİ (Concurrent Write Lock)
+# GÜVENLİK 1: EŞ ZAMANLI YAZMA KİLİDİ (Concurrent Write Lock)
 # =====================================================================
 file_lock = asyncio.Lock()
 
@@ -22,7 +26,6 @@ class SafeDatabase:
     @staticmethod
     async def save_json(filename: str, data: dict):
         async with file_lock:
-            # Geçici dosyaya yazıp atomik olarak değiştirme (çökmelere karşı veri koruma)
             temp_filename = f"{filename}.tmp"
             try:
                 with open(temp_filename, "w", encoding="utf-8") as f:
@@ -45,19 +48,32 @@ class SafeDatabase:
             return {}
 
 # =====================================================================
-# 2. API TTL CACHE & OTOMATİK YENİDEN DENEME (Retry & Rate Limit Koruma)
+# GÜVENLİK 2: URL SANITIZATION (Zararlı/Sahte URL & Script Koruması)
+# =====================================================================
+def is_safe_url(url: str) -> bool:
+    if not url or not isinstance(url, str):
+        return False
+    url_pattern = re.compile(r'^https?://[^\s<>"]+|www\.[^\s<>"]+$', re.IGNORECASE)
+    if not url_pattern.match(url):
+        return False
+    dangerous_keywords = ["javascript:", "data:", "vbscript:", "onload=", "onerror="]
+    if any(keyword in url.lower() for keyword in dangerous_keywords):
+        return False
+    return True
+
+# =====================================================================
+# API TTL CACHE & OTOMATİK YENİDEN DENEME (Retry & Rate Limit Koruması)
 # =====================================================================
 class CachedRiotAPI:
     def __init__(self):
         self.cache = {}
-        self.cache_ttl = 300  # 5 Dakika TTL Cache
+        self.cache_ttl = 300  # 5 Dakika
         self.headers = {"User-Agent": "V-Tracker-Bot/2.5"}
 
     async def get_mmr_with_retry(self, session: aiohttp.ClientSession, region: str, puuid: str):
         cache_key = f"mmr_{region}_{puuid}"
         now = time.time()
 
-        # TTL Cache Kontrolü
         if cache_key in self.cache:
             data, timestamp = self.cache[cache_key]
             if now - timestamp < self.cache_ttl:
@@ -65,7 +81,6 @@ class CachedRiotAPI:
 
         url = f"https://api.henrikdev.xyz/valorant/v2/mmr/{region}/by-puuid/{puuid}"
         
-        # Otomatik Yeniden Deneme (3 Deneme)
         for attempt in range(3):
             try:
                 async with session.get(url, headers=self.headers) as resp:
@@ -74,7 +89,6 @@ class CachedRiotAPI:
                         self.cache[cache_key] = (res_data, now)
                         return res_data
                     elif resp.status == 429:
-                        # Rate limit durumunda bekle
                         await asyncio.sleep(2 * (attempt + 1))
                     else:
                         break
@@ -86,14 +100,14 @@ class CachedRiotAPI:
         return None
 
 # =====================================================================
-# 3. GELİŞMİŞ ÖZELLİKLER COG
+# GELİŞMİŞ ÖZELLİKLER COG (v!updateroles, v!daily, Cooldown ve Dinamik Metinler)
 # =====================================================================
 class AdvancedFeatures(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.riot_api = CachedRiotAPI()
-
-        # Dinamik Taktiksel Ödül Mesajları
+        
+        # Dinamik Ödül Metinleri
         self.daily_flavor_texts = [
             "🚀 Operasyon masasından günlük lojistik desteğin alındı komutan!",
             "⚡ Ajan kasana taktiksel V-Coin bütçesi aktarıldı, iyi harcamalar!",
@@ -132,23 +146,19 @@ class AdvancedFeatures(commands.Cog):
             mmr_data = await self.riot_api.get_mmr_with_retry(session, region, puuid)
 
             if not mmr_data or "data" not in mmr_data:
-                return await loading.edit(content="❌ Kadem Verisi alınamadı. API yanıt vermiyor.")
+                return await loading.edit(content="❌ Kademe verisi alınamadı. API yanıt vermiyor.")
 
             current_tier = mmr_data["data"].get("currenttierpatched")
             if not current_tier:
                 return await loading.edit(content="❌ Aktif bir rekabetçi kademen bulunamadı.")
 
-            # Sunucuda kademeyle eşleşen rolü bulma
             guild_role = discord.utils.get(ctx.guild.roles, name=current_tier)
             if not guild_role:
                 return await loading.edit(content=f"⚠️ `{current_tier}` kademen bulundu ancak sunucuda bu isimde bir rol (**{current_tier}**) oluşturulmamış! Lütfen sunucu yöneticisine bildir.")
 
             try:
-                # Kullanıcının mevcut diğer olası rank rollerini temizleyip yenisini verme
-                added = False
                 if guild_role not in ctx.author.roles:
                     await ctx.author.add_roles(guild_role)
-                    added = True
 
                 embed = discord.Embed(
                     title="🛡️ Rol Senkronizasyonu Başarılı",
@@ -157,17 +167,18 @@ class AdvancedFeatures(commands.Cog):
                 )
                 await loading.edit(content=None, embed=embed)
             except discord.Forbidden:
-                await loading.edit(content="❌ Yetersiz yetki! Botun rolleri yönetebilmesi için 'Rolleri Yönet' yetkisine ve rol sıralamasında üst sırada olması gerekiyor.")
+                await loading.edit(content="❌ Yetersiz yetki! Botun 'Rolleri Yönet' yetkisine ve rol sıralamasında üst sırada olması gerekiyor.")
 
-    # --- DİNAMİK GÜNLÜK ÖDÜL (v!daily) & GERİ SAYIM SAATLERİ (<t:Tarih:R>) ---
+    # --- DİNAMİK GÜNLÜK ÖDÜL (v!daily) & GERİ SAYIM (<t:Tarih:R>) ---
     @commands.hybrid_command(name="daily", description="Her 24 saatte bir rastgele metinli günlük ödülünü alırsın.")
+    @commands.cooldown(1, 86400, commands.BucketType.user)
     async def daily_command(self, ctx):
         user_id = str(ctx.author.id)
         economy_data = SafeDatabase.load_json("vtracker_economy.json")
         user_eco = economy_data.setdefault(user_id, {"balance": 1000, "last_daily": 0})
 
         now = int(time.time())
-        cooldown_time = 86400  # 24 Saat
+        cooldown_time = 86400
 
         if now - user_eco["last_daily"] < cooldown_time:
             next_available = user_eco["last_daily"] + cooldown_time
