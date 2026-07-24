@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-V-Tracker.gg - Riot OAuth2 (RSO) Güvenli Doğrulama Modülü
+V-Tracker.gg - Riot OAuth2 (RSO) Güvenli Kayıt ve Doğrulama Modülü
 """
 
 import discord
@@ -11,6 +11,7 @@ import json
 import os
 import logging
 from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse
 import uvicorn
 import threading
 
@@ -19,14 +20,13 @@ logger = logging.getLogger("V-Tracker-RSO")
 # --- RIOT DEVELOPER BILGILERINI BURAYA GIR ---
 CLIENT_ID = "SENIN_RIOT_CLIENT_ID"
 CLIENT_SECRET = "SENIN_RIOT_CLIENT_SECRET"
-REDIRECT_URI = "http://localhost:8000/auth/callback"  # Canlıya alınca kendi domain/ip adresini yazmalısın
+REDIRECT_URI = "http://localhost:8000/auth/callback"  # Canlıya alınca domain/ip adresini yazmalısın
 # ---------------------------------------------
 
 file_lock = asyncio.Lock()
 
 class SecureAuthDatabase:
     USERS_FILE = "global_registered_users.json"
-    PENDING_FILE = "vtracker_rso_pending.json"
 
     @classmethod
     async def load_json(cls, filename):
@@ -116,23 +116,20 @@ async def riot_callback(code: str, state: str):
         "name": name,
         "tag": tag,
         "region": region,
-        "dc_name": "DiscordUser", # İsteğe bağlı güncellenebilir
+        "dc_name": "DiscordUser",
         "v_coins": existing_coins,
         "cosmetics": existing_cosmetics
     }
     await SecureAuthDatabase.save_json(SecureAuthDatabase.USERS_FILE, users)
 
-    # Şık bir HTML başarı sayfası döndür
     return HTMLResponse(content="""
         <html>
             <body style="background-color: #0f1923; color: #ff4655; font-family: Arial, sans-serif; text-align: center; padding-top: 100px;">
-                <h1>🎉 Hesap Başarıyla Doğrulandı!</h1>
+                <h1>🎉 Hesap Başarıyla Kaydedildi!</h1>
                 <p style="color: #ece8e1;">V-Tracker hesabınız güvenle eşleştirildi. Bu pencereyi kapatıp Discord'a dönebilirsiniz.</p>
             </body>
         </html>
     """)
-
-from fastapi.responses import HTMLResponse
 
 def run_fastapi():
     uvicorn.run(app, host="0.0.0.0", port=8000, log_level="warning")
@@ -141,17 +138,17 @@ def run_fastapi():
 class RiotOAuthSystem(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        # FastAPI sunucusunu arka planda (daemon thread olarak) başlatıyoruz
+        # FastAPI sunucusunu arka planda başlatıyoruz
         threading.Thread(target=run_fastapi, daemon=True).start()
 
-    @commands.hybrid_command(name="dogrula", description="Riot hesabınızı güvenli RSO altyapısı ile resmi olarak bağlar.")
+    @commands.hybrid_command(name="register", aliases=["kayit"], description="Riot hesabınızı güvenli RSO altyapısı ile resmi olarak kaydeder.")
     @commands.cooldown(1, 10, commands.BucketType.user)
-    async def dogrula(self, ctx):
+    async def register_command(self, ctx):
         user_id = str(ctx.author.id)
 
         users = await SecureAuthDatabase.load_json(SecureAuthDatabase.USERS_FILE)
         if user_id in users and users[user_id].get("puuid"):
-            return await ctx.send("⚠️ Zaten doğrulanmış ve sisteme bağlı bir Riot hesabın var! Değiştirmek için önce `v!unregister` kullanmalısın.")
+            return await ctx.send("⚠️ Zaten kayıtlı ve sisteme bağlı bir Riot hesabın var! Değiştirmek için önce `v!unregister` kullanmalısın.")
 
         # Riot OAuth Giriş Linki (state parametresine Discord User ID'sini ekliyoruz)
         auth_url = (
@@ -164,7 +161,7 @@ class RiotOAuthSystem(commands.Cog):
         )
 
         embed = discord.Embed(
-            title="🛡️ Güvenli Riot Hesap Doğrulaması (RSO)",
+            title="🛡️ Güvenli Riot Hesap Kaydı (RSO)",
             description=(
                 "Hesabınızı eşleştirmek için aşağıdaki resmi Riot Games bağlantısını kullanın.\n\n"
                 "🔒 **Güvence:** Şifreniz asla botumuz tarafından görülmez. İşlem doğrudan **Riot Games'in resmi sunucuları** üzerinden şifrelenmiş olarak gerçekleşir.\n\n"
@@ -176,4 +173,4 @@ class RiotOAuthSystem(commands.Cog):
 
 async def setup(bot):
     await bot.add_cog(RiotOAuthSystem(bot))
-    logger.info("Riot OAuth2 Güvenlik Modülü başarıyla yüklendi ve Web Sunucusu aktif!")
+    logger.info("Riot OAuth2 Kayıt Modülü başarıyla yüklendi!")
