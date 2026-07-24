@@ -1,72 +1,64 @@
 import discord
 from discord.ext import commands
 
-class HelpCog(commands.Cog):
+class HelpView(discord.ui.View):
+    def __init__(self):
+        super().__init__()
+        
+        self.add_item(discord.ui.Button(
+            label="Botu Sunucuna Ekle", 
+            url="BURAYA_BOT_DAVET_LINKINI_YAZ", 
+            style=discord.ButtonStyle.link,
+            emoji="🤖"
+        ))
+        
+        self.add_item(discord.ui.Button(
+            label="Web Sitemiz", 
+            url="https://valorant-bot-x6tv.onrender.com", 
+            style=discord.ButtonStyle.link,
+            emoji="🌐"
+        ))
+
+class Help(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @commands.command(name="help", aliases=["yardim", "komutlar", "info"])
+    @commands.hybrid_command(name="help", description="Botun tüm komutlarını ve nasıl kullanıldığını gösterir.")
     async def help_command(self, ctx):
-        # Valorant kırmızısı renginde, şık bir Embed (mesaj kartı) oluşturuyoruz
         embed = discord.Embed(
-            title="🎯 V-Tracker Bot | Yardım Menüsü",
-            description="V-Tracker botunun tüm komutları aşağıda kategorilere ayrılmıştır.\nKomutları kullanırken başına `v!` eklemeyi unutmayın.",
-            color=discord.Color.from_rgb(250, 68, 84) 
+            title="V-Tracker.gg | Yardım Menüsü",
+            description="Botun özelliklerini ve komutların nasıl kullanılacağını aşağıdan inceleyebilirsin.",
+            color=discord.Color.blurple()
         )
         
-        # --- KATEGORİ 1: İstatistik ---
         embed.add_field(
-            name="📊 İstatistik & Analiz",
-            value=(
-                "`v!stats` - Genel performansını ve K/D oranını gösterir.\n"
-                "`v!match` - Oynadığın son maçın özetini getirir.\n"
-                "`v!agent` - Main ajanındaki istatistiklerini analiz eder."
-            ),
+            name="💰 Ekonomi Komutları",
+            value="**`/balance`** - Güncut cüzdan bakiyeni ve paranı gösterir.\n**`/daily`** - 24 saatte bir alabileceğin günlük ödülü verir.",
             inline=False
         )
         
-        # --- KATEGORİ 2: Hesap ---
         embed.add_field(
-            name="🔗 Hesap İşlemleri",
-            value=(
-                "`v!register [İsim#Tag]` - Riot hesabını Discord'a bağlar.\n"
-                "`v!profile` - Sana özel V-Tracker profil kartını çizer.\n"
-                "`v!unlink` - Kayıtlı Riot hesabını sistemden siler."
-            ),
+            name="🎮 Valorant Komutları",
+            value="**`/stats [isim] [etiket]`** - Belirtilen Valorant hesabının istatistiklerini gösterir.\n**`/match [isim] [etiket]`** - Hesabın son oynadığı maçın verilerini getirir.",
             inline=False
         )
         
-        # --- KATEGORİ 3: Ekonomi ---
         embed.add_field(
-            name="💰 V-Coin & Ekonomi",
-            value=(
-                "`v!wallet` - Mevcut V-Coin bakiyeni gösterir.\n"
-                "`v!daily` - Günlük ücretsiz V-Coin ödülünü alırsın.\n"
-                "`v!top` - Sunucudaki en zengin oyuncuları listeler."
-            ),
+            name="⚙️ Diğer Komutlar",
+            value="**`/ping`** - Botun gecikme süresini (ms) ölçer.\n**`/help`** - Bu yardım menüsünü açar.",
             inline=False
         )
-
-        # --- ALT BİLGİ ---
-        # İsteyen kişinin profil fotoğrafını ve adını sağ alta ekliyoruz
-        embed.set_footer(
-            text=f"Talep eden: {ctx.author.name} | V-Tracker.gg", 
-            icon_url=ctx.author.display_avatar.url
-        )
         
-        # Botun kendi profil fotoğrafını sağ üste küçük simge olarak ekliyoruz
-        if self.bot.user.display_avatar:
-            embed.set_thumbnail(url=self.bot.user.display_avatar.url)
-
-        # Menüyü kanala gönder
-        await ctx.send(embed=embed)
+        embed.set_thumbnail(url="BURAYA_KUCUK_FOTO_LINKI_YAZABILIRSIN")
+        embed.set_image(url="BURAYA_BUYUK_GIF_VEYA_FOTO_LINKI_YAZABILIRSIN")
+        
+        avatar_url = self.bot.user.avatar.url if self.bot.user.avatar else None
+        embed.set_footer(text="V-Tracker.gg | Senin Valorant Asistanın", icon_url=avatar_url)
+        
+        view = HelpView()
+        
+        await ctx.send(embed=embed, view=view)
 
 async def setup(bot):
-    # Çakışma olmaması için Discord'un varsayılan help komutunu siliyoruz
-    try:
-        bot.remove_command("help")
-    except Exception:
-        pass
-    
-    # Yeni klasik yardım menümüzü bota ekliyoruz
-    await bot.add_cog(HelpCog(bot))
+    bot.remove_command("help")
+    await bot.add_cog(Help(bot))
