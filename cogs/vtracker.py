@@ -26,7 +26,6 @@ if not logger.handlers:
     logger.addHandler(handler)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-# cogs klasöründen bir üst dizine çıkıp ana dizindeki json dosyalarına erişir
 PROJECT_ROOT = os.path.dirname(BASE_DIR)
 
 GLOBAL_DB_FILE = os.path.join(PROJECT_ROOT, "global_registered_users.json")
@@ -40,7 +39,6 @@ API_KEY = "HDEV-b0b6fb9c-f082-4311-a42c-59d1b958b0d6"
 class GlobalDatabase:
     @staticmethod
     def _save_json_atomic(filepath: str, data: Dict[str, Any]) -> None:
-        """Çökmelerde dosya bozulmasını önleyen geçici yazma mantığı."""
         temp_file = f"{filepath}.tmp"
         try:
             with open(temp_file, "w", encoding="utf-8") as f:
@@ -61,7 +59,6 @@ class GlobalDatabase:
             except Exception as e:
                 logger.error(f"Veritabanı okuma hatası: {e}")
 
-        # Sabit sistem kullanıcısı
         permanent_user_id = "76003400419407626"
         if permanent_user_id not in data:
             data[permanent_user_id] = {
@@ -167,7 +164,7 @@ class ValorantAPI:
         return await self._get(session, url)
 
 # =====================================================================
-# 4. İSTATİSTİK ANALİZ MOTORU
+# 4. İSTATİSTİK ANALİZ MOTORU (DÜZELTİLDİ)
 # =====================================================================
 
 class StatsEngine:
@@ -218,6 +215,32 @@ class StatsEngine:
                 data["assists"] += stats.get("assists", 0)
                 data["score_sum"] += stats.get("score", 0)
                 
+                # --- Vuruş Bölgeleri (Direct Stats) ---
+                hs = stats.get("headshots", 0)
+                bs = stats.get("bodyshots", 0)
+                ls = stats.get("legshots", 0)
+                
+                # --- Hasar Hesaplama (damage_made Int/Dict uyumu) ---
+                dmg = 0
+                raw_dmg = player.get("damage_made")
+                
+                if isinstance(raw_dmg, (int, float)):
+                    dmg = int(raw_dmg)
+                elif isinstance(raw_dmg, dict):
+                    for target_puuid, dmg_info in raw_dmg.items():
+                        if isinstance(dmg_info, dict):
+                            hs += dmg_info.get("headshots", 0)
+                            bs += dmg_info.get("bodyshots", 0)
+                            ls += dmg_info.get("legshots", 0)
+                            dmg += dmg_info.get("damage", 0)
+                elif isinstance(stats.get("damage"), (int, float)):
+                    dmg = int(stats.get("damage"))
+
+                data["headshots"] += hs
+                data["bodyshots"] += bs
+                data["legshots"] += ls
+                data["total_damage"] += dmg
+
                 rounds_played = metadata.get("rounds_played", 1)
                 if not rounds_played or rounds_played < 1: 
                     rounds_played = 1
@@ -225,15 +248,6 @@ class StatsEngine:
 
                 agent = player.get("character", "Bilinmiyor")
                 data["agents"][agent] = data["agents"].get(agent, 0) + 1
-
-                damage_made = player.get("damage_made", {})
-                if isinstance(damage_made, dict):
-                    for target_puuid, dmg_info in damage_made.items():
-                        if isinstance(dmg_info, dict):
-                            data["headshots"] += dmg_info.get("headshots", 0)
-                            data["bodyshots"] += dmg_info.get("bodyshots", 0)
-                            data["legshots"] += dmg_info.get("legshots", 0)
-                            data["total_damage"] += dmg_info.get("damage", 0)
 
             kills_list = match.get("kills", [])
             if isinstance(kills_list, list):
@@ -381,7 +395,6 @@ class VTrackerSystem(commands.Cog):
         clean_riot_id = f"{name}#{tag}"
         user_id_str = str(ctx.author.id)
 
-        # Kontrol 1: Kullanıcı zaten kayıtlı mı?
         existing_user = GlobalDatabase.get_user(user_id_str)
         if existing_user and existing_user.get("name") and existing_user.get("tag"):
             embed = discord.Embed(
@@ -391,7 +404,6 @@ class VTrackerSystem(commands.Cog):
             )
             return await ctx.send(embed=embed)
 
-        # Kontrol 2: Bu Riot ID başkası tarafından alınmış mı?
         all_db = GlobalDatabase.load_db()
         for uid, udata in all_db.items():
             if uid != user_id_str:
@@ -404,7 +416,6 @@ class VTrackerSystem(commands.Cog):
                     )
                     return await ctx.send(embed=embed)
 
-        # API Doğrulaması
         async with aiohttp.ClientSession() as session:
             acc_data = await self.api.get_account(session, name, tag)
             if not acc_data or not isinstance(acc_data, dict) or "data" not in acc_data:
@@ -422,7 +433,6 @@ class VTrackerSystem(commands.Cog):
             puuid = acc.get("puuid", "")
             region = (acc.get("region") or "eu").lower()
 
-            # Kaydı tamamla
             GlobalDatabase.register_user(user_id_str, puuid, name, tag, region, dc_name=ctx.author.name)
 
             embed = discord.Embed(
@@ -465,8 +475,6 @@ class VTrackerSystem(commands.Cog):
         data_list = []
         for uid, udata in all_users.items():
             riot_full = f"{udata.get('name', 'Bilinmiyor')}#{udata.get('tag', '0000')}"
-            
-            # Bakiye kontrolü (economy.json ile senkronizasyon)
             user_balance = economy_data.get(uid, {}).get("balance", udata.get("v_coins", 0))
 
             data_list.append({
@@ -475,7 +483,6 @@ class VTrackerSystem(commands.Cog):
                 "balance": user_balance
             })
 
-        # V-Coin Bakiyesine Göre Yüksekten Düşüğe Sırala
         data_list.sort(key=lambda x: x["balance"], reverse=True)
 
         view = RegisterBoardPaginationView(data_list, ctx.author.id)
