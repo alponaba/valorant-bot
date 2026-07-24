@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-V-Tracker.gg - Otomatik Güvenlik & Doğrulama Modülü (Entegre Sürüm)
+V-Tracker.gg - Otomatik Güvenlik & Doğrulama Modülü (V + 4 Rakam Uyumlu)
 """
 
 import discord
@@ -18,7 +18,7 @@ logger = logging.getLogger("V-Tracker-Security")
 file_lock = asyncio.Lock()
 
 class SecureAuthDatabase:
-    USERS_FILE = "global_registered_users.json"  # Ana sistemin ortak veritabanı dosyası
+    USERS_FILE = "global_registered_users.json"
     CHALLENGES_FILE = "vtracker_challenges.json"
 
     @classmethod
@@ -52,7 +52,7 @@ class AutomatedSecuritySystem(commands.Cog):
         self.bot = bot
         self.headers = {"User-Agent": "V-Tracker-Bot/8.0", "Authorization": "HDEV-b0b6fb9c-f082-4311-a42c-59d1b958b0d6"}
 
-    @commands.hybrid_command(name="dogrula", description="Riot hesabınızın size ait olduğunu otomatik kod ile doğrular.")
+    @commands.hybrid_command(name="dogrula", description="Riot hesabınızın size ait olduğunu 5 haneli tag kodu ile doğrular.")
     @commands.cooldown(1, 10, commands.BucketType.user)
     async def dogrula(self, ctx, *, riot_id: str = None):
         if not riot_id or "#" not in riot_id or len(riot_id.split("#")) != 2:
@@ -78,12 +78,12 @@ class AutomatedSecuritySystem(commands.Cog):
 
         puuid = acc_data.get("puuid")
         
-        # Mükerrer PUUID kontrolü (Başka biri bu hesabı bağlamış mı?)
         for uid, udata in users.items():
             if udata.get("puuid") == puuid:
                 return await ctx.send("❌ Bu Riot hesabı zaten başka bir Discord kullanıcısı tarafından doğrulanmış!")
 
-        challenge_code = f"VTRK-{random.randint(1000, 9999)}"
+        # V harfi + 4 rakam (Örn: V4829 - Tam 5 karakter, Riot tag sınırına birebir uygun)
+        challenge_code = f"V{random.randint(1000, 9999)}"
 
         challenges = await SecureAuthDatabase.load_json(SecureAuthDatabase.CHALLENGES_FILE)
         challenges[user_id] = {
@@ -98,16 +98,16 @@ class AutomatedSecuritySystem(commands.Cog):
         embed = discord.Embed(
             title="🛡️ Otomatik Riot Hesap Doğrulama",
             description=f"**{acc_data.get('name')}#{acc_data.get('tag')}** hesabının sana ait olduğunu doğrulamamız gerekiyor.\n\n"
-                        f"🔑 **Doğrulama Kodun:** `{challenge_code}`\n\n"
+                        f"🔑 **Doğrulama Tag Kodun:** `{challenge_code}`\n\n"
                         f"**Nasıl Onaylayacaksın?**\n"
                         f"1. Riot Games hesabına web üzerinden giriş yap.\n"
-                        f"2. Profilindeki **Riot ID (İsim veya Tagline)** kısmına geçici olarak bu kodu ekle.\n"
-                        f"3. Kodunu ekledikten sonra **`v!onayla`** komutunu yaz!",
+                        f"2. Profilindeki **Tag / Etiket** kısmını geçici olarak **`{challenge_code}`** yapın (5 karakter sınırına tam uyar).\n"
+                        f"3. Kodunu tag kısmına kaydettikten sonra **`v!onayla`** komutunu yaz!",
             color=0x00FFFF
         )
         await ctx.send(embed=embed)
 
-    @commands.hybrid_command(name="onayla", description="Riot profiline eklediğin kodu kontrol ederek hesabı güvenle bağlar.")
+    @commands.hybrid_command(name="onayla", description="Riot tag kısmına eklediğin V+4 haneli kodu kontrol ederek hesabı güvenle bağlar.")
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def onayla(self, ctx):
         user_id = str(ctx.author.id)
@@ -135,16 +135,13 @@ class AutomatedSecuritySystem(commands.Cog):
                 current_acc = data.get("data", {})
 
         current_tag = current_acc.get("tag", "")
-        current_name = current_acc.get("name", "")
 
-        if expected_code not in current_tag and expected_code not in current_name:
-            return await ctx.send(f"❌ Doğrulama başarısız! Riot profilinde **`{expected_code}`** kodunu bulamadık. Lütfen kodu eklediğinden emin ol ve tekrar dene.")
+        if expected_code.lower() not in current_tag.lower():
+            return await ctx.send(f"❌ Doğrulama başarısız! Riot tag kısmında **`{expected_code}`** kodunu bulamadık. Lütfen etiketini bu kodla güncellediğinden emin ol ve tekrar dene.")
 
-        # Challenge kaydını temizle
         challenges.pop(user_id)
         await SecureAuthDatabase.save_json(SecureAuthDatabase.CHALLENGES_FILE, challenges)
 
-        # Ana veritabanına bağlan (Mevcut V-Coin ve kozmetikleri koruyarak)
         users = await SecureAuthDatabase.load_json(SecureAuthDatabase.USERS_FILE)
         
         existing_cosmetics = users.get(user_id, {}).get("cosmetics", {
