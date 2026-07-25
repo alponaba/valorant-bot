@@ -125,8 +125,8 @@ async def riot_callback(code: str, state: str):
     return HTMLResponse(content="""
         <html>
             <body style="background-color: #0f1923; color: #ff4655; font-family: Arial, sans-serif; text-align: center; padding-top: 100px;">
-                <h1>🎉 Hesap Başarıyla Kaydedildi!</h1>
-                <p style="color: #ece8e1;">V-Tracker hesabınız güvenle eşleştirildi. Bu pencereyi kapatıp Discord'a dönebilirsiniz.</p>
+                <h1>🎉 Hesap Başarıyla Doğrulandı!</h1>
+                <p style="color: #ece8e1;">V-Tracker hesabınız Riot sistemleri ile güvenle eşleştirildi. Bu pencereyi kapatıp Discord'a dönebilirsiniz.</p>
             </body>
         </html>
     """)
@@ -138,19 +138,22 @@ def run_fastapi():
 class RiotOAuthSystem(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        # FastAPI sunucusunu arka planda başlatıyoruz
         threading.Thread(target=run_fastapi, daemon=True).start()
 
-    @commands.hybrid_command(name="register", aliases=["kayit"], description="Riot hesabınızı güvenli RSO altyapısı ile resmi olarak kaydeder.")
+    @commands.hybrid_command(name="dogrula", description="Riot hesabınızın size ait olduğunu resmi olarak doğrular.")
     @commands.cooldown(1, 10, commands.BucketType.user)
-    async def register_command(self, ctx):
+    async def dogrula_command(self, ctx, *, riot_id: str = None):
+        # Format Kontrolü (İsim#Etiket girilmiş mi?)
+        if not riot_id or "#" not in riot_id:
+            return await ctx.send("⚠️ **Hatalı kullanım!** Lütfen hesabınızı `v!dogrula İsim#Etiket` formatında yazın.\n*Örnek: `v!dogrula nxbx#TR1`*")
+
         user_id = str(ctx.author.id)
 
         users = await SecureAuthDatabase.load_json(SecureAuthDatabase.USERS_FILE)
         if user_id in users and users[user_id].get("puuid"):
-            return await ctx.send("⚠️ Zaten kayıtlı ve sisteme bağlı bir Riot hesabın var! Değiştirmek için önce `v!unregister` kullanmalısın.")
+            return await ctx.send("⚠️ Zaten doğrulanmış ve sisteme bağlı bir Riot hesabın var! Yeni bir hesap doğrulamak için önce eskini silmelisin.")
 
-        # Riot OAuth Giriş Linki (state parametresine Discord User ID'sini ekliyoruz)
+        # Riot OAuth Giriş Linki
         auth_url = (
             f"https://auth.riotgames.com/authorize?"
             f"client_id={CLIENT_ID}&"
@@ -161,16 +164,22 @@ class RiotOAuthSystem(commands.Cog):
         )
 
         embed = discord.Embed(
-            title="🛡️ Güvenli Riot Hesap Kaydı (RSO)",
+            title="🛡️ Güvenli Hesap Doğrulaması (RSO)",
             description=(
-                "Hesabınızı eşleştirmek için aşağıdaki resmi Riot Games bağlantısını kullanın.\n\n"
-                "🔒 **Güvence:** Şifreniz asla botumuz tarafından görülmez. İşlem doğrudan **Riot Games'in resmi sunucuları** üzerinden şifrelenmiş olarak gerçekleşir.\n\n"
-                f"👉 **[Resmi Riot Giriş Sayfası için Tıklayın]({auth_url})**"
+                f"Belirttiğin **{riot_id}** hesabının gerçekten sana ait olduğunu doğrulamamız gerekiyor. "
+                "Başkalarının senin hesabınla işlem yapmasını engellemek için aşağıdaki bağlantıdan Riot Games'e giriş yaparak kimliğini kanıtla.\n\n"
+                "🔒 **Güvence:** Şifreniz asla botumuz tarafından görülmez. İşlem doğrudan **Riot Games'in resmi sunucuları** üzerinden gerçekleşir.\n\n"
+                f"👉 **[Doğrulamayı Tamamlamak İçin Tıkla]({auth_url})**"
             ),
             color=0xFF4655
         )
         await ctx.send(embed=embed, ephemeral=True)
 
 async def setup(bot):
+    # vtracker.py içinden gelebilecek eski komut çakışmalarını otomatik kaldırıyoruz
+    bot.remove_command("register")
+    bot.remove_command("kayit")
+    bot.remove_command("dogrula") # Eğer önceden tanımlanmışsa temizlemek için
+    
     await bot.add_cog(RiotOAuthSystem(bot))
-    logger.info("Riot OAuth2 Kayıt Modülü başarıyla yüklendi!")
+    logger.info("Riot OAuth2 Doğrulama Modülü başarıyla yüklendi! Eski komutlar geçersiz kılındı.")
