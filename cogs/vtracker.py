@@ -438,55 +438,7 @@ class VTrackerSystem(commands.Cog):
         else:
             logger.error(f"Komut Hatası ({ctx.command}): {error}")
 
-    # --- KOMUT 1: v!register ---
-    @commands.hybrid_command(name="register", aliases=["kayit"], description="Riot hesabını (İsim#Tag) Discord hesabına bağlar.")
-    @commands.cooldown(1, 10, commands.BucketType.user)
-    async def register_command(self, ctx, *, riot_id: str = None):
-        await ctx.defer()
-        
-        if not riot_id or "#" not in riot_id or len(riot_id.split("#")) != 2:
-            embed = discord.Embed(
-                title="❌ Hatalı Format!",
-                description=f"Lütfen Riot ID'nizi `OyuncuAdı#Etiket` şeklinde girin.\n**Örnek:** `{ctx.prefix}register Alperen#TR1`",
-                color=discord.Color.red()
-            )
-            return await ctx.send(embed=embed)
 
-        name, tag = [x.strip() for x in riot_id.split("#")]
-        clean_riot_id = f"{name}#{tag}"
-        user_id_str = str(ctx.author.id)
-
-        existing_user = GlobalDatabase.get_user(user_id_str)
-        if existing_user and existing_user.get("name") and existing_user.get("tag"):
-            embed = discord.Embed(
-                title="⚠️ Zaten Kayıtlısınız!",
-                description=f"Discord hesabınız zaten **{existing_user['name']}#{existing_user['tag']}** hesabına bağlı.\nHesabı değiştirmek için önce `{ctx.prefix}unregister` kullanmalısınız.",
-                color=discord.Color.gold()
-            )
-            return await ctx.send(embed=embed)
-
-        async with aiohttp.ClientSession() as session:
-            acc_data = await self.api.get_account(session, name, tag)
-            if not acc_data or not isinstance(acc_data, dict) or "data" not in acc_data:
-                embed = discord.Embed(
-                    title="❌ Riot Hesabı Bulunamadı",
-                    description=f"`{clean_riot_id}` isimli oyuncu Valorant sisteminde bulunamadı.",
-                    color=discord.Color.red()
-                )
-                return await ctx.send(embed=embed)
-
-            acc = acc_data.get("data", {})
-            puuid = acc.get("puuid", "")
-            region = (acc.get("region") or "eu").lower()
-
-            await GlobalDatabase.register_user(user_id_str, puuid, name, tag, region, dc_name=ctx.author.name)
-
-            embed = discord.Embed(
-                title="✅ Kayıt Başarılı!",
-                description=f"**{ctx.author.name}**, Riot hesabınız başarıyla eşlendi:\n🎯 **Riot ID:** `{name}#{tag}`\n🌐 **Bölge:** `{region.upper()}`",
-                color=discord.Color.green()
-            )
-            await ctx.send(embed=embed)
 
     # --- KOMUT 2: v!unregister ---
     @commands.hybrid_command(name="unregister", aliases=["kayitsil"], description="Mevcut Riot hesabı bağlantınızı sistemden siler.")
