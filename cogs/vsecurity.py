@@ -356,7 +356,6 @@ async def setup(bot):
         bot.remove_command("register")
         bot.remove_command("kayit")
         bot.remove_command("kayıt")
-        bot.remove_command("dogrula") 
     except Exception as e:
         logger.warning(f"Komut temizleme uyarısı: {e}")
         
