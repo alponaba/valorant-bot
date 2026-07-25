@@ -41,7 +41,7 @@ class VTrackerBot(commands.Bot):
 
     async def setup_hook(self):
         print("---------------------------------------------")
-        print("🚀 V-Tracker.gg Asistanı başlatılıyor...")
+        print(":rocket: V-Tracker.gg Asistanı başlatılıyor...")
         
         # cogs klasöründeki tüm modülleri otomatik ve güvenli şekilde yükler
         if os.path.exists("./cogs"):
@@ -50,14 +50,14 @@ class VTrackerBot(commands.Bot):
                     cog_name = filename[:-3]
                     try:
                         await self.load_extension(f"cogs.{cog_name}")
-                        print(f"📦 [COGS] cogs.{cog_name} başarıyla yüklendi.")
+                        print(f":package: [COGS] cogs.{cog_name} başarıyla yüklendi.")
                     except Exception as e:
-                        print(f"❌ [HATA] cogs.{cog_name} yüklenemedi: {e}")
+                        print(f":x: [HATA] cogs.{cog_name} yüklenemedi: {e}")
         print("---------------------------------------------")
 
     async def on_ready(self):
-        print(f"✅ Bot Aktif! Giriş yapıldı: {self.user} (ID: {self.user.id})")
-        print("🎮 V-Tracker.gg sistemleri çalışmaya hazır.")
+        print(f":white_check_mark: Bot Aktif! Giriş yapıldı: {self.user} (ID: {self.user.id})")
+        print(":video_game: V-Tracker.gg sistemleri çalışmaya hazır.")
         print("---------------------------------------------")
 
 bot = VTrackerBot()
