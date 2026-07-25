@@ -64,8 +64,7 @@ bot = VTrackerBot()
 
 # Botunu Çalıştıracak Token
 BOT_TOKEN = os.getenv("DISCORD_TOKEN")
-
 if __name__ == '__main__':
-  keep_alive()
-  token = os.getenv('DISCORD_TOKEN')
-  bot.run(token)
+    keep_alive()
+    token = os.getenv('DISCORD_TOKEN')  # Doğrudan yazdığın tokenı sil, bunu yaz
+    bot.run(token)
