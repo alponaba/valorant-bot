@@ -1,59 +1,86 @@
-# V-Tracker Rebuild 2.0
+# V-Tracker 4.0
 
-Bu paket, yüklenen eski Valorant Discord botunun temizlenmiş ve yeniden düzenlenmiş sürümüdür.
+V-Tracker; Valorant oyuncu analizi, otomatik rank/maç takibi, topluluk araçları, V-Coin ekonomisi ve Discord güvenlik/moderasyon sistemini tek botta birleştirir.
 
-## Ana değişiklikler
+## Öne çıkan sistemler
 
-- Tek Discord hesabı = tek Riot hesabı.
-- Kayıt, Riot ID'nin API'de varlığını kontrol eder ve sabit PUUID kimliğine kilitler.
-- Aynı Riot hesabı ikinci Discord hesabına kaydedilemez.
-- Kullanıcı kendi kaydını silip başka hesaba geçemez. Sadece bot sahibi `registration_reset` ile istisna oluşturabilir.
-- Riot oyuncu adı değişirse `sync` aynı PUUID üzerinden yeni adı günceller.
-- Eski JSON karmaşası yerine SQLite kullanılır.
-- Eski projedeki sabit API anahtarları kaldırıldı; bütün sırlar environment variable oldu.
-- Kayıt ekranı buton/modal + profil önizleme + onay akışıyla yenilendi.
-- Stats, son maç, kıyaslama, koç, V-Coin, profil özelleştirme, taktik, moderasyon ve sunucu araçları tek tasarım diline getirildi.
+### Oyuncu Intelligence
+- Butonlu Player Hub (`stats`, `profile`, `hub`)
+- V-Score (0–1000)
+- Player DNA: Aim, Impact, Survival, Consistency, Clutch
+- Tilt risk skoru ve form analizi
+- Tekrarsız kişisel koçluk; önceki koç mesajları SQLite'ta tutulur
+- Son maç kartı, kişisel rekorlar, performans trendi
+- Ajan/harita/weapon intelligence
+- Daily / Weekly report, streak ve weekly growth leaderboard
 
-## Doğrulama ne kadar güçlü?
+### Otomasyon
+- Rank + RR değişim takibi
+- Yeni maç algılama
+- Rank rolü otomatik senkronizasyonu
+- Kişisel rekor kaydı/bildirimi
+- İlk otomasyon taraması sessiz baseline'dır; deploy olur olmaz eski maçı yeni maç diye spamlamaz
+- Snapshot DB büyümesini azaltmak için yalnız değişiklikte veya 6 saatte bir sağlık snapshot'ı
+- Bildirim tercihleri (`notifications`)
 
-`register` akışı Riot ID'nin gerçekten var olduğunu Henrik API üzerinden doğrular ve PUUID'yi alır. Bu, başka isim yazarak rastgele/geçersiz kayıt açılmasını önler ve hesabı sabit PUUID'ye kilitler.
+### Topluluk
+- Rival / Rival Board
+- Duo Compatibility
+- Friend Card
+- LFG ilanı + butonla katılım
+- V-Coin, mağaza, profil kozmetiği, leaderboard, görevler
 
-**Bu, resmî Riot Sign-On (RSO) sahiplik doğrulaması değildir.** Bot Riot şifresi istemez. Gerçek RSO entegrasyonu Riot tarafından onaylanmış ürün/client bilgileri gerektirir. Bu paket sahte bir "resmî OAuth" ekranı göstermemek için eski placeholder RSO kodunu kaldırır.
+### Güvenlik
+- Global kullanıcı/sunucu komut rate limit
+- Henrik API circuit breaker + cache
+- Anti-raid join burst algılama
+- Yeni Discord hesabı risk skoru
+- V-Tracker Quarantine rolü
+- Mass mention koruması
+- Tekrarlanan mesaj fingerprint spam tespiti
+- Scam/phishing kalıp filtresi
+- İsteğe bağlı Discord invite filtresi
+- Mention injection temizleme
+- Banner HTTPS + trusted host whitelist
+- Moderasyon rol hiyerarşisi
+- Warn escalation: 3 uyarı -> 10 dk, 5+ uyarı -> 1 saat timeout
+- Admin audit log
+
+## Riot hesap doğrulaması
+
+Bot sahte Riot OAuth/RSO göstermez. `register` Riot hesabını API'den bulur; kullanıcı sahiplik doğrulama talebi oluşturur ve yetkili ekran görüntüsü/kısa kayıt gibi kanıtı manuel inceler. Şifre, 2FA veya giriş bilgisi istenmez. Onay sonrası Discord ID ile Riot PUUID kalıcı eşleştirilir.
 
 ## Kurulum
 
 1. Python 3.11+ kur.
 2. `pip install -r requirements.txt`
-3. Hosting panelinde `DISCORD_TOKEN` ve `HENRIK_API_KEY` environment variable olarak ekle.
-4. Discord Developer Portal'da Message Content Intent ve Server Members Intent aç.
-5. `python main.py`
+3. `.env.example` içindeki değerleri hosting panelinin environment variables bölümüne gir.
+4. Discord Developer Portal'da **Message Content Intent** ve **Server Members Intent** aç.
+5. Botu başlat: `python main.py`
+6. Sunucuda `v!setup` çalıştır.
+7. Oluşan kanal/rol ID'lerini hosting environment variables alanına ekle ve botu yeniden başlat.
 
-## Kayıt akışı
+## Minimum gerekli env
 
-- `/register` veya `v!register`
-- Riot ID gir: `OyuncuAdi#TAG`
-- Bot API'den hesabı bulur ve profil önizlemesi gösterir.
-- `Evet, bu hesap benim` onayı verilir.
-- Discord ID ve Riot PUUID kalıcı kilitlenir.
-- Riot ID sonradan değişirse `/sync` kullanılır; başka hesap kaydı açılmaz.
+- `DISCORD_TOKEN`
+- `HENRIK_API_KEY` (Henrik kullanım planına göre)
 
-## Bot sahibi için kayıt sıfırlama
+Otomasyon için önerilen:
+- `TRACKER_CHANNEL_ID`
+- `VERIFICATION_CHANNEL_ID`
+- `VERIFIER_ROLE_ID`
+- `AUTOMOD_LOG_CHANNEL_ID`
+- `QUARANTINE_ROLE_ID`
 
-`/registration_reset @kullanici sebep`
+## Veri
 
-Bu komut yalnız Discord uygulamasının/botun sahibi tarafından kullanılabilir.
+Varsayılan DB: `data/vtracker.sqlite3`
 
-## Önemli güvenlik notu
+Production host ephemeral filesystem kullanıyorsa `DATABASE_PATH` kalıcı diske yönlendirilmelidir. Discord ↔ Riot PUUID kilidi, ekonomi, audit ve snapshot geçmişi bu veritabanındadır.
 
-Yüklenen eski projede kaynak içine yazılmış Henrik API anahtarları vardı. Bu yeni ZIP'e hiçbir anahtar taşınmadı. Eski anahtarları Henrik panelinden iptal edip yeni anahtar üretmen önerilir. `.git` klasörü de eski sırları geçmişte saklayabileceği için yeni pakete dahil edilmedi.
+## Gizlilik
 
-
-## 2.1 Manuel Riot hesap sahiplik doğrulaması
-
-`v!register` artık yalnızca Riot profilinin API'de bulunmasını kayıt için yeterli saymaz. Kullanıcı doğrulama talebi oluşturur; admin kanıtı kontrol ettikten sonra `v!verify @kullanıcı` ile onaylar veya `v!rejectverify @kullanıcı neden` ile reddeder. Onaydan sonra Discord ID ile Riot PUUID kalıcı olarak eşleştirilir.
-
-Önerilen Render değişkeni:
-
-- `VERIFICATION_CHANNEL_ID`: doğrulama taleplerinin gönderileceği Discord kanal ID'si. Ayarlanmazsa talep veritabanında bekler ve admin komutla onaylayabilir.
-
-Kanıt olarak Riot istemcisinde ilgili hesabın açık olduğunu gösteren ekran görüntüsü/kısa ekran kaydı kullanılabilir. Bot hiçbir zaman Riot şifresi veya giriş bilgisi istememelidir. Bu manuel yöntem resmi Riot RSO/OAuth değildir.
+- Token/API key kaynak dosyalara yazılmaz.
+- PUUID Discord mesajlarında maskelenir.
+- Kanıt sürecinde Riot şifresi veya 2FA bilgisi istenmez.
+- Kullanıcı kaynaklı mention'lar sanitize edilir.

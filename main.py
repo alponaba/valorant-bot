@@ -78,6 +78,10 @@ class VTrackerBot(commands.Bot):
             "cogs.tactical",
             "cogs.moderation",
             "cogs.server_tools",
+            "cogs.community",
+            "cogs.protection",
+            "cogs.automation",
+            "cogs.reports",
             "cogs.help",
         ]
         for ext in extensions:
@@ -96,7 +100,7 @@ class VTrackerBot(commands.Bot):
 
     async def on_ready(self):
         log.info("Bot ready: %s (%s)", self.user, self.user.id if self.user else "?")
-        activity = discord.Activity(type=discord.ActivityType.watching, name=f"{BOT_PREFIX}help • V-Tracker 3.0")
+        activity = discord.Activity(type=discord.ActivityType.watching, name=f"{BOT_PREFIX}help • V-Tracker 4.0")
         try:
             await self.change_presence(status=discord.Status.online, activity=activity)
         except Exception:

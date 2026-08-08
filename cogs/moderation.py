@@ -47,7 +47,18 @@ class Moderation(commands.Cog):
         reason = sanitize_text(reason)
         wid = await db.add_warning(ctx.guild.id, member.id, ctx.author.id, reason)
         await db.log_admin_action(ctx.guild.id, ctx.author.id, member.id, "WARN", reason)
-        await ctx.send(embed=success("Uyarı kaydedildi", f"{member.mention} • #{wid}\n{reason}"))
+        rows = await db.get_warnings(ctx.guild.id, member.id)
+        escalation = ""
+        try:
+            if len(rows) >= 5:
+                await member.timeout(timedelta(hours=1), reason="V-Tracker warn escalation: 5+ warnings")
+                escalation = "\nOtomatik escalation: **1 saat timeout** uygulandı."
+            elif len(rows) >= 3:
+                await member.timeout(timedelta(minutes=10), reason="V-Tracker warn escalation: 3+ warnings")
+                escalation = "\nOtomatik escalation: **10 dakika timeout** uygulandı."
+        except discord.HTTPException:
+            escalation = "\nEscalation tetiklendi ancak botun timeout yetkisi/rol sırası yetersiz."
+        await ctx.send(embed=success("Uyarı kaydedildi", f"{member.mention} • #{wid}\n{reason}{escalation}"))
 
     @commands.hybrid_command(name="warnings", aliases=["uyarilar", "uyarılar"], description="Kullanıcının son uyarılarını listeler.")
     @commands.has_permissions(moderate_members=True)

@@ -71,18 +71,36 @@ class ServerTools(commands.Cog):
         role_names = [
             ("Doğrulanmış Oyuncu", 0x44D39A),
             ("V-Tracker Verifier", 0xF7D774),
-            ("Immortal", 0xF26C6C),
-            ("Ascendant", 0x44D39A),
+            ("Iron", 0x7F8C8D),
+            ("Bronze", 0xA97142),
+            ("Silver", 0xBDC3C7),
+            ("Gold", 0xF7D774),
+            ("Platinum", 0x2FD6C4),
             ("Diamond", 0x7DE8FF),
+            ("Ascendant", 0x44D39A),
+            ("Immortal", 0xF26C6C),
+            ("Radiant", 0xF7D774),
+            ("V-Tracker Quarantine", 0xF7D774),
         ]
         for name, color in role_names:
             if not discord.utils.get(guild.roles, name=name):
                 await guild.create_role(name=name, color=discord.Color(color), reason="V-Tracker setup")
         cat = discord.utils.get(guild.categories, name="V-TRACKER") or await guild.create_category("V-TRACKER")
-        names = ["v-tracker-komut", "istatistikler", "öneriler", "dogrulama", "admin-log"]
+        names = ["v-tracker-komut", "istatistikler", "tracker-feed", "lfg", "öneriler", "dogrulama", "automod-log", "admin-log"]
         for name in names:
             if not discord.utils.get(guild.text_channels, name=name):
                 await guild.create_text_channel(name, category=cat)
+        quarantine = discord.utils.get(guild.roles, name="V-Tracker Quarantine")
+        verify_channel = discord.utils.get(guild.text_channels, name="dogrulama")
+        if quarantine:
+            for channel in guild.text_channels:
+                try:
+                    if verify_channel and channel.id == verify_channel.id:
+                        await channel.set_permissions(quarantine, view_channel=True, send_messages=True, read_message_history=True)
+                    else:
+                        await channel.set_permissions(quarantine, send_messages=False, add_reactions=False)
+                except discord.HTTPException:
+                    pass
         await db.log_admin_action(guild.id, ctx.author.id, 0, "SETUP", "roles+channels provisioned")
         await ctx.send(embed=success("Kurulum tamamlandı", "V-Tracker kategorisi, temel kanallar ve roller hazır. `VERIFIER_ROLE_ID`, `VERIFICATION_CHANNEL_ID`, `SUGGESTION_CHANNEL_ID`, `ADMIN_LOG_CHANNEL_ID` değerlerini ortam değişkenlerine gir."))
 

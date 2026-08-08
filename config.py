@@ -32,3 +32,19 @@ GLOBAL_GUILD_RATE = int(os.getenv("GLOBAL_GUILD_RATE", "40"))
 GLOBAL_GUILD_WINDOW = int(os.getenv("GLOBAL_GUILD_WINDOW", "10"))
 API_FAIL_OPEN_COUNT = int(os.getenv("API_FAIL_OPEN_COUNT", "5"))
 API_COOLDOWN_SECONDS = int(os.getenv("API_COOLDOWN_SECONDS", "30"))
+
+# V4 automation / community / protection
+TRACK_INTERVAL_SECONDS = int(os.getenv("TRACK_INTERVAL_SECONDS", "900"))
+TRACK_BATCH_SIZE = int(os.getenv("TRACK_BATCH_SIZE", "40"))
+TRACKER_CHANNEL_ID = int(os.getenv("TRACKER_CHANNEL_ID", "0") or 0)
+LFG_CHANNEL_ID = int(os.getenv("LFG_CHANNEL_ID", "0") or 0)
+QUARANTINE_ROLE_ID = int(os.getenv("QUARANTINE_ROLE_ID", "0") or 0)
+AUTOMOD_LOG_CHANNEL_ID = int(os.getenv("AUTOMOD_LOG_CHANNEL_ID", "0") or 0)
+ANTI_RAID_JOIN_COUNT = int(os.getenv("ANTI_RAID_JOIN_COUNT", "8"))
+ANTI_RAID_WINDOW_SECONDS = int(os.getenv("ANTI_RAID_WINDOW_SECONDS", "30"))
+NEW_ACCOUNT_RISK_DAYS = int(os.getenv("NEW_ACCOUNT_RISK_DAYS", "7"))
+MASS_MENTION_LIMIT = int(os.getenv("MASS_MENTION_LIMIT", "5"))
+MESSAGE_SPAM_COUNT = int(os.getenv("MESSAGE_SPAM_COUNT", "6"))
+MESSAGE_SPAM_WINDOW = int(os.getenv("MESSAGE_SPAM_WINDOW", "8"))
+BLOCK_INVITES = os.getenv("BLOCK_INVITES", "false").lower() in {"1","true","yes","on"}
+AUTO_TRACK_ENABLED = os.getenv("AUTO_TRACK_ENABLED", "true").lower() in {"1","true","yes","on"}
