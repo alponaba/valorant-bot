@@ -1,5 +1,5 @@
-discord.py
-flask
-gunicorn
-requests
-aiohttp
+discord.py>=2.4,<3
+aiohttp>=3.9,<4
+Flask>=3.0,<4
+gunicorn>=22,<24
+PyNaCl>=1.5,<2

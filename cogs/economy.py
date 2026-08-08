@@ -1,188 +1,108 @@
-# -*- coding: utf-8 -*-
-"""
-V-Tracker.gg - Ekonomi, Günlük Ödül, Transfer ve Liderlik Sistemi
-Modül: cogs.economy
-"""
+from __future__ import annotations
+
+from datetime import datetime, timedelta, timezone
+import re
 
 import discord
 from discord.ext import commands
-import json
-import os
-import logging
-from datetime import datetime, timedelta
-from typing import Dict, Any, Optional
 
-logger = logging.getLogger("VTracker.Economy")
-logger.setLevel(logging.INFO)
-if not logger.handlers:
-    handler = logging.StreamHandler()
-    handler.setFormatter(logging.Formatter("[%(asctime)s] [%(levelname)s]: %(message)s"))
-    logger.addHandler(handler)
+from database import db, utc_now
+from theme import error, info, success, warning
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-GLOBAL_DB_FILE = os.path.join(BASE_DIR, "global_registered_users.json")
 
-class EconomyDatabase:
-    @staticmethod
-    def load_db() -> Dict[str, Any]:
-        if os.path.exists(GLOBAL_DB_FILE):
-            try:
-                with open(GLOBAL_DB_FILE, "r", encoding="utf-8") as f:
-                    content = f.read().strip()
-                    if content:
-                        return json.loads(content)
-            except Exception as e:
-                logger.error(f"Ekonomi DB okuma hatası: {e}")
-        return {}
+def parse_iso(v):
+    try: return datetime.fromisoformat(v) if v else None
+    except Exception: return None
 
-    @staticmethod
-    def save_db(data: Dict[str, Any]) -> None:
-        try:
-            with open(GLOBAL_DB_FILE, "w", encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False, indent=4)
-        except Exception as e:
-            logger.error(f"Ekonomi DB yazma hatası: {e}")
 
-    @staticmethod
-    def get_user_data(discord_id: str) -> Dict[str, Any]:
-        db = EconomyDatabase.load_db()
-        d_id = str(discord_id)
-        if d_id not in db:
-            db[d_id] = {
-                "puuid": "",
-                "name": "Bilinmiyor",
-                "tag": "TR1",
-                "region": "eu",
-                "v_coins": 1000,  # Başlangıç bonusu
-                "last_daily": None,
-                "total_given": 0
-            }
-            EconomyDatabase.save_db(db)
-        return db[d_id]
+class Economy(commands.Cog):
+    def __init__(self, bot): self.bot=bot
 
-    @staticmethod
-    def update_user_balance(discord_id: str, amount: int) -> int:
-        db = EconomyDatabase.load_db()
-        d_id = str(discord_id)
-        if d_id not in db:
-            EconomyDatabase.get_user_data(d_id)
-            db = EconomyDatabase.load_db()
-        
-        db[d_id]["v_coins"] = max(0, db[d_id].get("v_coins", 0) + amount)
-        EconomyDatabase.save_db(db)
-        return db[d_id]["v_coins"]
+    @commands.hybrid_command(name="balance", aliases=["bakiye", "bal", "para"], description="V-Coin bakiyeni gösterir.")
+    async def balance(self, ctx, member: discord.Member=None):
+        member=member or ctx.author; u=await db.get_user(member.id)
+        if not u: return await ctx.send(embed=error("Kayıt yok", "Ekonomi sistemi için önce kayıt olmalısın."))
+        await ctx.send(embed=info("V-Coin Cüzdanı", f"{member.mention}\n💰 **{u['v_coins']:,} V-Coin**"))
 
-class EconomyCog(commands.Cog):
-    def __init__(self, bot):
-        self.bot = bot
+    async def _claim(self, ctx, kind, seconds, amount):
+        u=await db.get_user(ctx.author.id)
+        if not u: return await ctx.send(embed=error("Kayıt yok", "Önce `v!register` kullan."))
+        last=parse_iso(await db.get_claim_time(ctx.author.id, kind)); now=datetime.now(timezone.utc)
+        if last and now-last < timedelta(seconds=seconds):
+            remain=timedelta(seconds=seconds)-(now-last); hrs=int(remain.total_seconds()//3600); mins=int((remain.total_seconds()%3600)//60)
+            return await ctx.send(embed=warning("Ödül hazır değil", f"Yaklaşık **{hrs} sa {mins} dk** sonra tekrar deneyebilirsin."))
+        await db.set_claim_time(ctx.author.id,kind,now.isoformat()); bal=await db.add_coins(ctx.author.id,amount,f"{kind}_claim")
+        await ctx.send(embed=success("Ödül alındı", f"+**{amount:,} V-Coin**\nYeni bakiye: **{bal:,}**"))
 
-    @commands.command(name="balance", aliases=["bakiye", "bal", "para"])
-    async def balance_command(self, ctx, member: Optional[discord.Member] = None):
-        target = member or ctx.author
-        data = EconomyDatabase.get_user_data(target.id)
-        coins = data.get("v_coins", 0)
+    @commands.hybrid_command(name="daily", aliases=["gunluk", "günlük"], description="24 saatte bir V-Coin alırsın.")
+    async def daily(self, ctx): await self._claim(ctx,"daily",86400,250)
 
-        embed = discord.Embed(
-            title="🏦 V-Tracker.gg Cüzdan Durumu",
-            description=f"**{target.mention}** adlı kullanıcının varlık bilgileri:",
-            color=0xF1C40F
-        )
-        embed.add_field(name="V-Coin Miktarı", value=f"🪙 **{coins:,} V-Coin**", inline=False)
-        embed.set_footer(text=f"Sorgulayan: {ctx.author.display_name}")
-        await ctx.send(embed=embed)
+    @commands.hybrid_command(name="weekly", aliases=["haftalik", "haftalık"], description="7 günde bir haftalık V-Coin alırsın.")
+    async def weekly(self, ctx): await self._claim(ctx,"weekly",604800,1500)
 
-    @commands.command(name="daily", aliases=["gunluk"])
-    async def daily_command(self, ctx):
-        d_id = str(ctx.author.id)
-        db = EconomyDatabase.load_db()
-        user_data = db.get(d_id)
-        
-        if not user_data:
-            user_data = EconomyDatabase.get_user_data(d_id)
-            db = EconomyDatabase.load_db()
+    @commands.hybrid_command(name="transfer", aliases=["gonder", "gönder", "give"], description="Kayıtlı bir kullanıcıya V-Coin gönderir.")
+    async def transfer(self, ctx, member: discord.Member, amount: int):
+        ok,reason=await db.transfer_coins(ctx.author.id,member.id,amount)
+        messages={"invalid":"Miktar 0'dan büyük olmalı.","self":"Kendine transfer yapamazsın.","not_registered":"İki kullanıcı da kayıtlı olmalı.","insufficient":"Bakiyen yetersiz."}
+        await ctx.send(embed=success("Transfer tamamlandı",f"{member.mention} kullanıcısına **{amount:,} V-Coin** gönderildi.") if ok else error("Transfer başarısız",messages.get(reason,"İşlem tamamlanamadı.")))
 
-        now = datetime.utcnow()
-        last_daily_str = user_data.get("last_daily")
-        
-        daily_reward = 750
+    @commands.hybrid_command(name="leaderboard", aliases=["lb", "top", "zenginler"], description="V-Coin sıralamasını gösterir.")
+    async def leaderboard(self, ctx):
+        users=await db.list_users(10); e=info("V-Coin Sıralaması", "Sunucudan bağımsız global kayıt tablosu")
+        if not users: e.description="Henüz kayıtlı kullanıcı yok."
+        else:
+            e.add_field(name="Top 10", value="\n".join(f"`{i}.` **{u['dc_name']}** — {u['game_name']}#{u['tag_line']} • 💰 `{u['v_coins']:,}`" for i,u in enumerate(users,1)), inline=False)
+        await ctx.send(embed=e)
 
-        if last_daily_str:
-            last_daily = datetime.fromisoformat(last_daily_str)
-            next_available = last_daily + timedelta(hours=24)
-            if now < next_available:
-                remaining = next_available - now
-                hours, remainder = divmod(int(remaining.total_seconds()), 3600)
-                minutes, _ = divmod(remainder, 60)
-                return await ctx.send(f"⏳ Günlük ödülünü zaten almışsın! Tekrar alabilmek için **{hours} saat {minutes} dakika** beklemelisin.")
+    @commands.hybrid_command(name="shop", aliases=["magaza", "mağaza"], description="Profil özelleştirme mağazasını gösterir.")
+    async def shop(self, ctx):
+        e=info("V-Tracker Mağaza", "Profilini V-Coin ile özelleştir.")
+        e.add_field(name="🎨 Renk • 2.500", value="`v!buy renk`", inline=False)
+        e.add_field(name="✨ Emoji • 5.000", value="`v!buy emoji`", inline=False)
+        e.add_field(name="🖼️ Banner • 10.000", value="`v!buy banner`", inline=False)
+        await ctx.send(embed=e)
 
-        user_data["last_daily"] = now.isoformat()
-        db[d_id] = user_data
-        EconomyDatabase.save_db(db)
-        
-        new_balance = EconomyDatabase.update_user_balance(ctx.author.id, daily_reward)
+    @commands.hybrid_command(name="buy", aliases=["satinal", "satınal"], description="Profil özelliğinin kilidini açar.")
+    async def buy(self, ctx, item: str):
+        prices={"renk":2500,"emoji":5000,"banner":10000}; item=item.lower().strip(); u=await db.get_user(ctx.author.id)
+        if not u: return await ctx.send(embed=error("Kayıt yok","Önce kayıt ol."))
+        if item not in prices: return await ctx.send(embed=error("Ürün yok","Seçenekler: `renk`, `emoji`, `banner`"))
+        import json
+        unlocked=set(json.loads(u.get('unlocked_json') or '[]'))
+        if item in unlocked: return await ctx.send(embed=info("Zaten açık",f"**{item}** zaten hesabında açık."))
+        if u['v_coins']<prices[item]: return await ctx.send(embed=error("Bakiye yetersiz",f"Gerekli: **{prices[item]:,} V-Coin**"))
+        # Atomic enough for single process: subtract then update unlocked directly.
+        await db.add_coins(ctx.author.id,-prices[item],f"shop:{item}")
+        unlocked.add(item)
+        async with db._lock:
+            with db._connect() as conn:
+                conn.execute("UPDATE users SET unlocked_json=?, updated_at=? WHERE discord_id=?",(json.dumps(sorted(unlocked)),utc_now(),str(ctx.author.id)))
+        await ctx.send(embed=success("Satın alındı",f"**{item}** özelliği açıldı."))
 
-        embed = discord.Embed(
-            title="🎁 Günlük V-Coin Ödülü",
-            description=f"Başarıyla günlük ödülünü topladın!\n\nCüzdanına eklenen: **+{daily_reward} V-Coin**\nGüncel Bakiyen: **{new_balance:,} V-Coin**",
-            color=0x2ECC71
-        )
-        await ctx.send(embed=embed)
+    @commands.hybrid_command(name="customize", aliases=["profil_ayarla"], description="Satın alınan profil görünümünü ayarlar.")
+    async def customize(self, ctx, kind: str, *, value: str):
+        import json
+        u=await db.get_user(ctx.author.id)
+        if not u: return await ctx.send(embed=error("Kayıt yok","Önce kayıt ol."))
+        kind=kind.lower().strip(); unlocked=set(json.loads(u.get('unlocked_json') or '[]'))
+        if kind not in unlocked: return await ctx.send(embed=error("Kilitli",f"Önce `v!buy {kind}` kullan."))
+        if kind=="renk":
+            v=value.strip().replace('#','').replace('0x','')
+            if not re.fullmatch(r'[0-9a-fA-F]{6}',v): return await ctx.send(embed=error("Renk hatalı","Örnek: `v!customize renk FF4655`"))
+            await db.set_profile(ctx.author.id,color=int(v,16))
+        elif kind=="emoji": await db.set_profile(ctx.author.id,emoji=value.strip())
+        elif kind=="banner":
+            if not re.match(r'^https://',value.strip(),re.I): return await ctx.send(embed=error("URL hatalı","Banner HTTPS bağlantısı olmalı."))
+            await db.set_profile(ctx.author.id,banner=value.strip())
+        else: return await ctx.send(embed=error("Tür hatalı","`renk`, `emoji` veya `banner` kullan."))
+        await ctx.send(embed=success("Profil güncellendi",f"**{kind}** ayarı kaydedildi."))
 
-    @commands.command(name="give", aliases=["gonder", "transfer"])
-    async def give_command(self, ctx, member: Optional[discord.Member] = None, amount: int = 0):
-        if not member or amount <= 0:
-            return await ctx.send("❌ Hatalı kullanım! Örnek: `v!give @Kullanici 500`")
+    @commands.hybrid_command(name="challenges", aliases=["gorevler", "görevler"], description="Günlük ve haftalık görev önerilerini gösterir.")
+    async def challenges(self,ctx):
+        e=info("Görev Merkezi","V-Coin kazanmak için basit görevler")
+        e.add_field(name="Günlük",value="• `v!daily` ödülünü al\n• `v!stats` ile analiz yap\n• `v!coach` önerisini görüntüle",inline=False)
+        e.add_field(name="Haftalık",value="• `v!weekly` ödülünü al\n• Bir arkadaşınla `v!compare @üye` yap\n• Profilini özelleştir",inline=False)
+        await ctx.send(embed=e)
 
-        if member.id == ctx.author.id:
-            return await ctx.send("❌ Kendine V-Coin gönderemezsin!")
 
-        sender_id = str(ctx.author.id)
-        sender_data = EconomyDatabase.get_user_data(sender_id)
-        sender_balance = sender_data.get("v_coins", 0)
-
-        # Give limiti kontrolü (Örn: Tek seferde max 50,000 V-Coin veya bakiye kontrolü)
-        if amount > 50000:
-            return await ctx.send("❌ Tek seferde en fazla **50,000 V-Coin** transfer edebilirsin!")
-
-        if sender_balance < amount:
-            return await ctx.send(f"❌ Yetersiz bakiye! Cüzdanında **{sender_balance:,} V-Coin** var.")
-
-        # Transfer işlemi
-        EconomyDatabase.update_user_balance(ctx.author.id, -amount)
-        EconomyDatabase.update_user_balance(member.id, amount)
-
-        embed = discord.Embed(
-            title="💸 V-Coin Transferi Başarılı",
-            description=f"**{ctx.author.mention}**, **{member.mention}** adlı kullanıcıya **{amount:,} V-Coin** gönderdi.",
-            color=0x3498DB
-        )
-        await ctx.send(embed=embed)
-
-    @commands.command(name="leaderboard", aliases=["lb", "top", "zenginler"])
-    async def leaderboard_command(self, ctx):
-        db = EconomyDatabase.load_db()
-        if not db:
-            return await ctx.send("📊 Henüz sistemde kayıtlı kullanıcı bulunmuyor.")
-
-        # V-Coin miktarına göre sırala
-        sorted_users = sorted(db.items(), key=lambda x: x[1].get("v_coins", 0), reverse=True)[:10]
-
-        embed = discord.Embed(
-            title="🏆 V-Tracker.gg V-Coin Liderlik Tablosu",
-            description="Sunucudaki en zengin Valorant oyuncuları:",
-            color=0xF39C12
-        )
-
-        desc_list = ""
-        for idx, (u_id, u_info) in enumerate(sorted_users, 1):
-            medal = "🥇" if idx == 1 else "🥈" if idx == 2 else "🥉" if idx == 3 else f"`#{idx}`"
-            name = u_info.get("name", "Bilinmiyor")
-            coins = u_info.get("v_coins", 0)
-            desc_list += f"{medal} <@İD_{u_id}> ({name}) — **{coins:,} V-Coin**\n".replace("İD_", "")
-
-        embed.add_field(name="Top 10 Zenginler", value=desc_list or "Veri yok.", inline=False)
-        embed.set_footer(text="Düzenli aktif olarak ve oyunlar oynayarak sıralamanı yükseltebilirsin!")
-        await ctx.send(embed=embed)
-
-async def setup(bot):
-    await bot.add_cog(EconomyCog(bot))
+async def setup(bot): await bot.add_cog(Economy(bot))
