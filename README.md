@@ -84,3 +84,15 @@ Production host ephemeral filesystem kullanıyorsa `DATABASE_PATH` kalıcı disk
 - PUUID Discord mesajlarında maskelenir.
 - Kanıt sürecinde Riot şifresi veya 2FA bilgisi istenmez.
 - Kullanıcı kaynaklı mention'lar sanitize edilir.
+
+## Web sitesi
+
+Aynı Flask servisi V-Tracker'ın public ürün sitesini de sunar:
+
+- `/` ana sayfa
+- `/commands` aranabilir 56 komut
+- `/status` canlı durum ekranı
+- `/privacy` gizlilik özeti
+- `/sitemap.xml` ve `/robots.txt` SEO uçları
+
+Google Search Console kurulumu için `SITE_GOOGLE_SEO.md` dosyasına bak.

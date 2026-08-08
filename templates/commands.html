@@ -1,0 +1,13 @@
+{% extends 'base.html' %}
+{% block content %}
+<main class="container">
+  <section class="pagehero"><div class="eyebrow">Komut kütüphanesi</div><h1>V-Tracker komutları.</h1><p class="lead">Toplam {{ command_count }} ana komut. İsim, açıklama veya alias yazarak filtreleyebilirsin.</p></section>
+  <div class="searchbar"><input data-command-search type="search" placeholder="Örn: coach, rank, güvenlik, lfg, bakiye..." aria-label="Komut ara"></div>
+  <div class="tabs"><button class="tab active" data-command-tab="all">Tümü</button>{% for group in command_groups %}<button class="tab" data-command-tab="{{ group.slug }}">{{ group.label }}</button>{% endfor %}</div>
+  <div class="commandgrid" style="padding-bottom:80px">
+    {% for group in command_groups %}{% for cmd in group.commands %}
+    <article class="cmdcard" data-command-card data-category="{{ group.slug }}"><code>v!{{ cmd.name }}</code><small>{{ group.label }}</small><p>{{ cmd.description }}</p>{% if cmd.aliases %}<p>Alias: {{ cmd.aliases|join(', ') }}</p>{% endif %}</article>
+    {% endfor %}{% endfor %}
+  </div>
+</main>
+{% endblock %}

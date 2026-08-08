@@ -1,0 +1,8 @@
+{% extends 'base.html' %}
+{% block content %}
+<main class="container">
+  <section class="pagehero"><div class="eyebrow"><span class="dot"></span> Live health endpoint</div><h1>Sistem durumu.</h1><p class="lead">Bu sayfa `/health` endpoint’inden anlık servis bilgisini okur.</p></section>
+  <div class="statusgrid"><div class="statusbox"><span>Web service</span><b class="livepill" data-status-key="service">Kontrol ediliyor</b></div><div class="statusbox"><span>Uptime</span><b data-status-key="uptime">—</b></div><div class="statusbox"><span>Valorant API</span><b data-status-key="api">—</b></div><div class="statusbox"><span>Last latency</span><b data-status-key="latency">—</b></div></div>
+  <section class="section"><div class="card"><h3>Teknik sağlık kontrolü</h3><p>Ham JSON cevabını görmek için <a style="color:var(--turq2)" href="/health">/health</a> endpoint’ini açabilirsin. API circuit breaker aktif olursa burada durum değişebilir.</p></div></section>
+</main>
+{% endblock %}

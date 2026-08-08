@@ -48,3 +48,13 @@ MESSAGE_SPAM_COUNT = int(os.getenv("MESSAGE_SPAM_COUNT", "6"))
 MESSAGE_SPAM_WINDOW = int(os.getenv("MESSAGE_SPAM_WINDOW", "8"))
 BLOCK_INVITES = os.getenv("BLOCK_INVITES", "false").lower() in {"1","true","yes","on"}
 AUTO_TRACK_ENABLED = os.getenv("AUTO_TRACK_ENABLED", "true").lower() in {"1","true","yes","on"}
+
+# Public website / SEO
+PUBLIC_SITE_URL = os.getenv("PUBLIC_SITE_URL", "").strip().rstrip("/")
+GOOGLE_SITE_VERIFICATION = os.getenv("GOOGLE_SITE_VERIFICATION", "").strip()
+DISCORD_BOT_INVITE_URL = os.getenv("DISCORD_BOT_INVITE_URL", "").strip()
+SUPPORT_SERVER_URL = os.getenv("SUPPORT_SERVER_URL", "").strip()
+SITE_DESCRIPTION = os.getenv(
+    "SITE_DESCRIPTION",
+    "V-Tracker; Valorant oyuncuları için Player DNA, V-Score, kişisel koçluk, rank ve maç takibi, LFG, raporlar ve gelişmiş Discord AutoMod sunan oyuncu platformudur.",
+).strip()

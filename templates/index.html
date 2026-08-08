@@ -1,69 +1,84 @@
-<!doctype html>
-<html lang="tr">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>V-Tracker 4.0</title>
-  <style>
-    :root {
-      --bg:#081217;
-      --card:#10212a;
-      --line:#1a3943;
-      --turq:#2fd6c4;
-      --turq2:#7de8ff;
-      --yellow:#f7d774;
-      --text:#e9f7fb;
-      --muted:#9eb7be;
-    }
-    *{box-sizing:border-box}
-    body{margin:0;font-family:Inter,Arial,sans-serif;background:linear-gradient(180deg,#081217,#0d1b22 65%,#12242d);color:var(--text)}
-    .wrap{max-width:1100px;margin:0 auto;padding:56px 20px}
-    .hero{display:grid;grid-template-columns:1.1fr .9fr;gap:28px;align-items:center}
-    .card{background:rgba(16,33,42,.92);border:1px solid var(--line);border-radius:24px;padding:24px;box-shadow:0 20px 50px rgba(0,0,0,.28)}
-    h1{font-size:54px;line-height:1.02;margin:0 0 16px}
-    h1 span{color:var(--turq)}
-    p{color:var(--muted);font-size:18px;line-height:1.6}
-    .pill{display:inline-block;padding:10px 14px;border:1px solid var(--line);border-radius:999px;background:rgba(47,214,196,.09);color:var(--turq2);font-size:14px;margin-bottom:14px}
-    .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:22px}
-    .kpi{padding:18px;border-radius:18px;background:#0c1b22;border:1px solid var(--line)}
-    .kpi b{display:block;color:var(--yellow);font-size:14px;margin-bottom:8px}
-    .kpi span{font-size:28px;font-weight:700}
-    ul{padding-left:18px;color:var(--muted);line-height:1.8}
-    .cta{display:flex;gap:12px;flex-wrap:wrap;margin-top:18px}
-    .btn{padding:12px 18px;border-radius:12px;background:var(--turq);color:#062126;text-decoration:none;font-weight:700}
-    .btn.alt{background:transparent;border:1px solid var(--line);color:var(--text)}
-    @media(max-width:900px){.hero,.grid{grid-template-columns:1fr}h1{font-size:40px}}
-  </style>
-</head>
-<body>
-  <div class="wrap">
-    <section class="hero">
-      <div>
-        <div class="pill">V-Tracker 4.0 • Player Intelligence</div>
-        <h1>Valorant istatistik botunu <span>daha akıllı</span> hale getir.</h1>
-        <p>Player DNA, tekrarsız kişisel koçluk, otomatik rank/maç takibi, LFG ve gelişmiş AutoMod ile tam oyuncu platformuna dönüştürülmüş Discord botu.</p>
-        <div class="cta">
-          <a class="btn" href="/health">Sistem Durumu</a>
-          <a class="btn alt" href="https://discord.com/developers/applications" target="_blank" rel="noreferrer">Discord Developer Portal</a>
-        </div>
+{% extends 'base.html' %}
+{% block content %}
+<main>
+  <section class="container hero">
+    <div>
+      <div class="eyebrow"><span class="dot"></span> Valorant Player Intelligence</div>
+      <h1>Oyunun veriye,<br><span class="accent">verin avantaja dönüşsün.</span></h1>
+      <p class="lead">V-Tracker; oyuncu istatistiğini yalnız göstermeyen, yorumlayan bir Discord platformu. Player DNA, V-Score, kişiye özel koçluk, rank ve maç otomasyonu, LFG ve gelişmiş sunucu koruması tek sistemde.</p>
+      <div class="heroactions" id="start">
+        <a class="btn primary" href="{{ bot_invite_url if bot_invite_url else '/commands' }}" {% if bot_invite_url %}target="_blank" rel="noopener noreferrer"{% endif %}>{{ "Discord'a Ekle" if bot_invite_url else "Komutları İncele" }}</a>
+        <a class="btn secondary" href="#intelligence">Player Intelligence</a>
       </div>
-      <div class="card">
-        <h2 style="margin-top:0;color:var(--turq2)">Tüm sistemler</h2>
-        <ul>
-          <li>Player Hub, V-Score, Player DNA, tilt ve tekrarsız kişisel koç</li>
-          <li>Otomatik rank, RR, maç, rank rolü ve kişisel rekor takibi</li>
-          <li>Rival, Duo Compatibility, Friend Card ve LFG</li>
-          <li>Anti-raid, risk score, quarantine, scam/spam/mass-mention koruması</li>
-          <li>Daily/Weekly report, trend, audit ve Security Center</li>
-        </ul>
+      <div class="micro"><span><strong>{{ command_count }}</strong> ana komut</span><span><strong>Player DNA</strong> profili</span><span><strong>AutoMod</strong> koruması</span></div>
+    </div>
+    <div class="dash" aria-label="V-Tracker oyuncu paneli demo görünümü">
+      <div class="windowbar"><span>PLAYER HUB / DEMO</span><span class="windowdots"><i></i><i></i><i></i></span></div>
+      <div class="profilehead">
+        <div><div class="kicker">Ranked profile</div><div class="player">Player#TR1</div><div class="rank">Ascendant 2 · 63 RR</div></div>
+        <div class="scorebubble"><div><strong>846</strong><span>V-Score</span></div></div>
       </div>
-    </section>
+      <div class="metricrow">
+        <div class="metric"><b>1.24</b><span>K/D</span></div><div class="metric"><b>27.4%</b><span>HEADSHOT</span></div><div class="metric"><b>153</b><span>ADR</span></div><div class="metric"><b>58%</b><span>WIN RATE</span></div>
+      </div>
+      <div class="dna"><div class="dnahead"><span>PLAYER DNA · AGGRESSIVE ENTRY</span><span>87 / 100</span></div><div class="bar"><i style="width:87%"></i></div></div>
+      <div class="stack"><div class="minicard"><strong>AUTOMATION</strong><p>Rank değişimi algılandı. Rol senkronize edildi ve kişisel rekor kontrol edildi.</p></div><div class="minicard"><strong>COACH SIGNAL</strong><p>Lotus performansı genel ortalamanın altında. İlk temas sonrası re-peek eğilimi takip edilmeli.</p></div></div>
+    </div>
+  </section>
 
-    <section class="grid">
-      <div class="kpi"><b>TEMA</b><span>Turkuaz + Açık Sarı</span></div>
-      <div class="kpi"><b>KULLANIM</b><span>Prefix + Slash</span></div>
-      <div class="kpi"><b>GÜVENLİK</b><span>AutoMod + Audit</span></div>
-    </section>
-  </div>
-</body>
-</html>
+  <section class="section container" id="features">
+    <div class="sectionhead"><div><div class="eyebrow">Tüm özellikler</div><h2>Bir stat botundan<br>daha fazlası.</h2></div><p>Komut yazıp sayı okumaktan öte; geçmiş tutan, değişimi yakalayan, oyuncuya göre yorum yapan ve sunucuda otomatik çalışan bir sistem.</p></div>
+    <div class="bento">
+      <article class="card span7"><div class="iconbox">01</div><h3>Player Hub + V-Score</h3><p>K/D, HS, ADR, ACS, win rate, rank ve form gibi verileri tek panelde birleştirir; V-Score ile okunabilir bir performans özeti üretir.</p><ul class="featurelist"><li>Genel / Performans / Ajan & Harita / Koç panelleri</li><li>Trend ve snapshot geçmişi</li><li>Kişisel rekorlar ve gelişim sinyalleri</li></ul></article>
+      <article class="card span5"><div class="iconbox">02</div><h3>Player DNA</h3><p>Oyuncuyu sadece K/D ile etiketlemek yerine Aim, Impact, Survival, Consistency ve Clutch gibi segmentlerden davranış profili çıkarır.</p></article>
+      <article class="card span4"><div class="iconbox">03</div><h3>Tekrarsız kişisel koç</h3><p>Koçluk; oyuncunun metriği, ajanı, formu ve önceki tavsiyeleriyle şekillenir. Aynı kullanıcıya aynı hazır paragrafı döndürmemek için cevap geçmişi tutulur.</p></article>
+      <article class="card span4"><div class="iconbox">04</div><h3>Rival + Duo + Friend Card</h3><p>Arkadaşlarla kıyas, kalıcı rival, duo compatibility ve ortak performans kartlarıyla sunucu içinde rekabet ve takım uyumu oluşturur.</p></article>
+      <article class="card span4"><div class="iconbox">05</div><h3>LFG</h3><p>Rank, rol, mod ve mikrofon tercihine göre takım arkadaşı ilanı oluşturur; uygun ilanları aynı panelde öne çıkarır.</p></article>
+    </div>
+  </section>
+
+  <section class="section" id="intelligence">
+    <div class="container split">
+      <div><div class="eyebrow">Player Intelligence</div><h2 style="font-size:52px;letter-spacing:-.045em;margin:16px 0">Her oyuncuya aynı tavsiyeyi vermeyen koçluk.</h2><p class="lead">V-Tracker’ın öneri sistemi yalnız bir eşik tablosuna bağlı değildir. Son performans, ana ajan, form ve önceki cevaplarla birlikte farklı tavsiye varyasyonları seçilir.</p><div class="terminal"><div class="termhead">v!coach · example</div><div class="termbody"><span class="cmd">&gt; analyze Player#TR1</span><br>HS <span class="good">27.4%</span> · ADR 153 · K/D 1.24<br>DNA Aggressive Entry<br>Map signal Lotus below baseline<br><span class="cmd">&gt; generate_unique_coaching</span><br>response history checked · duplicate avoided</div></div></div>
+      <div class="card coachbox"><div><div class="kicker">PERSONAL COACHING SAMPLE</div><p class="coachquote" data-coach-quote style="transition:opacity .18s">Son maçlarında HS oranı güçlü kalırken ADR düşmüş. Bir sonraki ranked'da ilk temasta kill zorlamak yerine utility sonrası trade mesafesini koru; özellikle Lotus'ta erken re-peek sayını azalt.</p></div><div class="coachmeta"><span data-coach-meta>Aim iyi • Impact düşüyor • Lotus odak</span><span>V-Coach</span></div></div>
+    </div>
+  </section>
+
+  <section class="section container" id="automation">
+    <div class="sectionhead"><div><div class="eyebrow">Otomasyon</div><h2>Sen komut yazmadan<br>çalışmaya devam eder.</h2></div><p>Takip sistemi ilk taramayı sessiz baseline olarak alır; sonraki gerçek değişikliklerde rank, maç, rekor ve rol senkronizasyonu gibi olayları işler.</p></div>
+    <div class="split">
+      <div class="timeline">
+        <div class="timeitem"><div class="timeindex">01</div><div><h4>Yeni maç algılama</h4><p>Son maç anahtarı değiştiğinde match alert üretilebilir; sonuç, harita, ajan ve K/D/A özetlenir.</p></div></div>
+        <div class="timeitem"><div class="timeindex">02</div><div><h4>Rank & RR takibi</h4><p>Rank/RR değişimini önceki snapshot ile karşılaştırır ve değişimin yönünü raporlar.</p></div></div>
+        <div class="timeitem"><div class="timeindex">03</div><div><h4>Rank role sync</h4><p>Discord rolünü oyuncunun güncel rank ailesiyle eşler; eski rank rollerini temizler.</p></div></div>
+        <div class="timeitem"><div class="timeindex">04</div><div><h4>Kişisel rekor kontrolü</h4><p>V-Score, RR, kill, K/D, HS ve ADR gibi zirveleri kalıcı kayıtlarla karşılaştırır.</p></div></div>
+      </div>
+      <div class="card"><div class="kicker">AUTOMATION CENTER</div><h3 style="font-size:28px">Bildirimlerini oyuncu kontrol eder.</h3><p>`v!notifications` ile rank, maç ve rapor bildirimleri ayrı ayrı açılıp kapatılabilir.</p><div class="securitygrid"><div class="securitycell"><span>RANK ALERTS</span><b>ON / OFF</b></div><div class="securitycell"><span>MATCH ALERTS</span><b>ON / OFF</b></div><div class="securitycell"><span>REPORTS</span><b>ON / OFF</b></div></div></div>
+    </div>
+  </section>
+
+  <section class="section" id="security">
+    <div class="container split">
+      <div class="card"><div class="kicker">SECURITY CENTER</div><h3 style="font-size:30px">AutoMod tek bir spam filtresi değil.</h3><div class="securitygrid"><div class="securitycell"><span>ANTI RAID</span><b>Join burst</b></div><div class="securitycell"><span>RISK SCORE</span><b>Account signals</b></div><div class="securitycell"><span>MESSAGE</span><b>Fingerprint spam</b></div><div class="securitycell"><span>LINKS</span><b>Scam patterns</b></div><div class="securitycell"><span>MENTION</span><b>Mass mention</b></div><div class="securitycell"><span>ACTION</span><b>Quarantine</b></div></div></div>
+      <div><div class="eyebrow">Güvenlik</div><h2 style="font-size:52px;letter-spacing:-.045em;margin:16px 0">Sunucuyu korur,<br>kararı görünür bırakır.</h2><p class="lead">Anti-raid, yeni hesap risk sinyalleri, scam-link kalıpları, invite filtresi, mass mention ve tekrar eden mesaj tespiti aynı koruma katmanında çalışır. Yüksek riskte karantina/timeout yaklaşımıyla moderatöre geri dönüş alanı bırakılır.</p><ul class="featurelist"><li>Admin audit log</li><li>Role hierarchy kontrolleri</li><li>Manuel Riot doğrulama + PUUID kilidi</li><li>Global user/guild rate limit + API circuit breaker</li></ul></div>
+    </div>
+  </section>
+
+  <section class="section container">
+    <div class="sectionhead"><div><div class="eyebrow">Komut merkezi</div><h2>{{ command_count }} komut,<br>tek düzenli sistem.</h2></div><p>Oyuncu, rapor, topluluk, ekonomi, taktik, sunucu ve güvenlik araçlarını ayrı kategorilerde bul.</p></div>
+    <div class="commandpreview"><div class="command"><code>v!stats</code><p>Detaylı Player Hub ve V-Score.</p></div><div class="command"><code>v!playerdna</code><p>Oyuncu tarzı segment analizi.</p></div><div class="command"><code>v!coach</code><p>Kişiye özel tekrarsız koçluk.</p></div><div class="command"><code>v!weeklyreport</code><p>7 günlük performans trendi.</p></div><div class="command"><code>v!lfg</code><p>Takım arkadaşı ilanı.</p></div><div class="command"><code>v!modpanel</code><p>Sunucu Security Center özeti.</p></div></div>
+    <div style="margin-top:18px"><a class="btn secondary" href="/commands">Tüm {{ command_count }} komutu aç</a></div>
+  </section>
+
+  <section class="section container">
+    <div class="sectionhead"><div><div class="eyebrow">Sık sorulanlar</div><h2>Kısa cevaplar.</h2></div></div>
+    <div class="faq">
+      <details><summary>V-Tracker Riot şifremi ister mi?</summary><p>Hayır. Manuel sahiplik doğrulamasında şifre, 2FA kodu veya giriş bilgisi istenmez. Hesap eşleştirmesi Riot profili ve PUUID kimliği üzerinden tutulur.</p></details>
+      <details><summary>Koç neden her seferinde aynı şeyi yazmıyor?</summary><p>Önerilerde oyuncu metrikleri ve önceki cevap geçmişi kullanılır. Belirli tavsiye komutlarında birebir tekrar eden yanıtları azaltmak için cevap geçmişi kontrol edilir.</p></details>
+      <details><summary>Sunucu koruması otomatik ban atıyor mu?</summary><p>Koruma tasarımında yanlış pozitiflere karşı daha geri alınabilir aksiyonlar tercih edilir. Riskli olaylar audit/risk kaydına düşebilir; karantina veya timeout gibi katmanlar moderatör kararını destekler.</p></details>
+    </div>
+  </section>
+
+  <section class="section container"><div class="cta"><div><h2>Oyuncu botundan oyuncu platformuna.</h2><p>Player Intelligence, otomasyon, topluluk ve güvenlik aynı V-Tracker içinde.</p></div><a class="btn primary" href="{{ bot_invite_url if bot_invite_url else '/commands' }}" {% if bot_invite_url %}target="_blank" rel="noopener noreferrer"{% endif %}>{{ "Discord'a Ekle" if bot_invite_url else "Komutları Gör" }}</a></div></section>
+</main>
+{% endblock %}

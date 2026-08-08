@@ -1,0 +1,11 @@
+{% extends 'base.html' %}
+{% block content %}
+<main class="container prose">
+  <section class="pagehero"><div class="eyebrow">Gizlilik</div><h1>Veri kullanım özeti.</h1><p class="lead">V-Tracker’ın çalışması için tuttuğu temel veri türleri ve güvenlik yaklaşımı.</p></section>
+  <h2>Hangi veriler tutulabilir?</h2><p>Discord kullanıcı kimliği, doğrulanan Riot hesabının PUUID kimliği ve görünen Riot ID bilgisi; bot içi ekonomi, tercih, snapshot, kişisel rekor, doğrulama, moderasyon ve güvenlik kayıtları gibi özellik verileri tutulabilir.</p>
+  <h2>Şifre ve giriş bilgileri</h2><p>V-Tracker Riot şifresi, Discord şifresi veya 2FA kodu istememelidir. Manuel sahiplik doğrulaması için hassas giriş bilgileri talep edilmez.</p>
+  <h2>Performans verisi</h2><p>Oyuncu analizi için üçüncü taraf Valorant API yanıtlarından alınan rank ve maç verileri işlenebilir. Snapshot geçmişi; trend, rapor ve kişisel rekor gibi özelliklerin çalışması için saklanabilir.</p>
+  <h2>Moderasyon ve güvenlik</h2><p>Sunucu yöneticileri güvenlik ve moderasyon özelliklerini açtığında uyarı, risk olayı, karantina ve audit kayıtları tutulabilir. Bu kayıtlar sunucu güvenliğini açıklanabilir ve takip edilebilir kılmak içindir.</p>
+  <h2>Marka bildirimi</h2><p>V-Tracker bağımsız bir topluluk projesidir ve Riot Games ile bağlantılı değildir. VALORANT ve ilgili markalar kendi hak sahiplerine aittir.</p>
+</main>
+{% endblock %}

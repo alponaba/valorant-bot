@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ page_title or 'V-Tracker — Valorant Discord Bot' }}</title>
+  <meta name="description" content="{{ page_description or site_description }}">
+  <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1">
+  <meta name="theme-color" content="#071116">
+  <meta name="application-name" content="V-Tracker">
+  <link rel="canonical" href="{{ canonical_url }}">
+  <link rel="icon" href="{{ url_for('static', filename='img/vtracker-mark.svg') }}" type="image/svg+xml">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="tr_TR">
+  <meta property="og:site_name" content="V-Tracker">
+  <meta property="og:title" content="{{ page_title or 'V-Tracker — Valorant Discord Bot' }}">
+  <meta property="og:description" content="{{ page_description or site_description }}">
+  <meta property="og:url" content="{{ canonical_url }}">
+  <meta property="og:image" content="{{ public_url }}/static/img/og-vtracker.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="{{ page_title or 'V-Tracker — Valorant Discord Bot' }}">
+  <meta name="twitter:description" content="{{ page_description or site_description }}">
+  <meta name="twitter:image" content="{{ public_url }}/static/img/og-vtracker.png">
+  {% if google_site_verification %}<meta name="google-site-verification" content="{{ google_site_verification }}">{% endif %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/site.css') }}">
+  <script type="application/ld+json">
+  {
+    "@context":"https://schema.org",
+    "@type":"WebSite",
+    "name":"V-Tracker",
+    "url":"{{ public_url }}/",
+    "inLanguage":"tr-TR",
+    "description":"{{ site_description }}"
+  }
+  </script>
+  {% if request.path == '/' %}
+  <script type="application/ld+json">
+  {
+    "@context":"https://schema.org",
+    "@type":"SoftwareApplication",
+    "name":"V-Tracker",
+    "applicationCategory":"GameApplication",
+    "operatingSystem":"Discord",
+    "isAccessibleForFree":true,
+    "description":"{{ site_description }}",
+    "url":"{{ public_url }}/",
+    "image":"{{ public_url }}/static/img/og-vtracker.png",
+    "offers":{"@type":"Offer","price":"0","priceCurrency":"TRY"}
+  }
+  </script>
+  {% endif %}
+</head>
+<body>
+  <nav class="nav">
+    <div class="container navin">
+      <a class="brand" href="/" aria-label="V-Tracker ana sayfa">
+        <span class="brandmark"><img src="{{ url_for('static', filename='img/vtracker-mark.svg') }}" alt="" width="34" height="34"></span>
+        <span>V-TRACKER</span>
+      </a>
+      <div class="navlinks">
+        <a href="/#features">Özellikler</a>
+        <a href="/#automation">Otomasyon</a>
+        <a href="/#security">Güvenlik</a>
+        <a href="/commands">Komutlar</a>
+        <a href="/status">Durum</a>
+      </div>
+      <div class="navactions">
+        <a class="btn secondary" href="/commands">56 komut</a>
+        <a class="btn primary" href="{{ bot_invite_url if bot_invite_url else '/#start' }}" {% if bot_invite_url %}target="_blank" rel="noopener noreferrer"{% endif %}>Discord'a Ekle</a>
+      </div>
+    </div>
+  </nav>
+
+  {% block content %}{% endblock %}
+
+  <footer>
+    <div class="container foot">
+      <div>
+        <div class="brand"><span>V-TRACKER</span></div>
+        <p style="max-width:500px;line-height:1.7">Valorant oyuncuları için performans analizi, kişisel koçluk, otomasyon ve Discord güvenliği. Riot Games ile bağlantılı veya Riot Games tarafından desteklenen bir ürün değildir.</p>
+      </div>
+      <div class="footlinks">
+        <a href="/commands">Komutlar</a><a href="/status">Sistem durumu</a><a href="/privacy">Gizlilik</a>
+        {% if support_server_url %}<a href="{{ support_server_url }}" target="_blank" rel="noopener noreferrer">Destek</a>{% endif %}
+      </div>
+    </div>
+  </footer>
+  <script src="{{ url_for('static', filename='js/site.js') }}" defer></script>
+</body>
+</html>

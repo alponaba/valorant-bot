@@ -10,7 +10,7 @@ from collections import defaultdict, deque
 
 import discord
 from discord.ext import commands
-from flask import Flask, jsonify, render_template
+from flask import Flask, Response, jsonify, render_template, request
 
 from config import (
     AUTO_SYNC_COMMANDS,
@@ -21,8 +21,14 @@ from config import (
     GLOBAL_USER_RATE,
     GLOBAL_USER_WINDOW,
     PORT,
+    PUBLIC_SITE_URL,
+    GOOGLE_SITE_VERIFICATION,
+    DISCORD_BOT_INVITE_URL,
+    SUPPORT_SERVER_URL,
+    SITE_DESCRIPTION,
 )
 from database import db
+from site_data import COMMAND_COUNT, COMMAND_GROUPS
 from security import DISCORD_ALLOWED_MENTIONS
 from valorant_api import api
 
@@ -33,9 +39,96 @@ app = Flask(__name__)
 BOT_START_TIME = time.time()
 
 
+def _site_context(path: str = ""):
+    base = (PUBLIC_SITE_URL or request.host_url.rstrip("/")).rstrip("/")
+    canonical = f"{base}{path or request.path}"
+    if canonical.endswith("/") and path not in {"", "/"}:
+        canonical = canonical.rstrip("/")
+    return {
+        "public_url": base,
+        "canonical_url": canonical,
+        "site_description": SITE_DESCRIPTION,
+        "google_site_verification": GOOGLE_SITE_VERIFICATION,
+        "bot_invite_url": DISCORD_BOT_INVITE_URL,
+        "support_server_url": SUPPORT_SERVER_URL,
+        "command_count": COMMAND_COUNT,
+        "command_groups": COMMAND_GROUPS,
+    }
+
+
 @app.get("/")
 def home():
-    return render_template("index.html")
+    return render_template(
+        "index.html",
+        page_title="V-Tracker — Valorant Discord Bot | Player Intelligence & AutoMod",
+        page_description=SITE_DESCRIPTION,
+        **_site_context("/"),
+    )
+
+
+@app.get("/commands")
+def commands_page():
+    return render_template(
+        "commands.html",
+        page_title=f"V-Tracker Komutları — {COMMAND_COUNT} Valorant & Discord Komutu",
+        page_description=f"V-Tracker'ın {COMMAND_COUNT} komutunu kategori, açıklama ve alias bilgileriyle keşfet.",
+        **_site_context("/commands"),
+    )
+
+
+@app.get("/privacy")
+def privacy_page():
+    return render_template(
+        "privacy.html",
+        page_title="V-Tracker Gizlilik — Veri Kullanımı ve Güvenlik",
+        page_description="V-Tracker'ın Discord, Riot hesap eşleştirme, performans snapshot ve moderasyon verilerini nasıl kullandığına dair özet.",
+        **_site_context("/privacy"),
+    )
+
+
+@app.get("/status")
+def status_page():
+    return render_template(
+        "status.html",
+        page_title="V-Tracker Sistem Durumu",
+        page_description="V-Tracker web servisi ve Valorant API bağlantısının anlık sağlık durumunu görüntüle.",
+        **_site_context("/status"),
+    )
+
+
+@app.get("/robots.txt")
+def robots():
+    base = (PUBLIC_SITE_URL or request.host_url.rstrip("/")).rstrip("/")
+    body = f"User-agent: *\nAllow: /\nDisallow: /health\nSitemap: {base}/sitemap.xml\n"
+    return Response(body, mimetype="text/plain")
+
+
+@app.get("/sitemap.xml")
+def sitemap():
+    base = (PUBLIC_SITE_URL or request.host_url.rstrip("/")).rstrip("/")
+    urls = ["/", "/commands", "/privacy"]
+    entries = "".join(f"<url><loc>{base}{u}</loc><changefreq>{'weekly' if u != '/privacy' else 'monthly'}</changefreq><priority>{'1.0' if u == '/' else '0.8'}</priority></url>" for u in urls)
+    xml = f'<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{entries}</urlset>'
+    return Response(xml, mimetype="application/xml")
+
+
+@app.get("/manifest.webmanifest")
+def manifest():
+    return jsonify({
+        "name": "V-Tracker",
+        "short_name": "V-Tracker",
+        "start_url": "/",
+        "display": "standalone",
+        "background_color": "#071116",
+        "theme_color": "#071116",
+        "icons": [{"src": "/static/img/vtracker-mark.svg", "sizes": "any", "type": "image/svg+xml"}],
+    })
+
+
+@app.get("/.well-known/security.txt")
+def security_txt():
+    body = "Canonical: " + (PUBLIC_SITE_URL or request.host_url.rstrip("/")) + "/.well-known/security.txt\nPolicy: " + (PUBLIC_SITE_URL or request.host_url.rstrip("/")) + "/privacy\n"
+    return Response(body, mimetype="text/plain")
 
 
 @app.get("/health")
