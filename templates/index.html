@@ -1,13 +1,69 @@
 <!doctype html>
 <html lang="tr">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>V-Tracker • Valorant Discord Assistant</title>
-<style>
-:root{--bg:#0f1923;--panel:#16232d;--red:#ff4655;--text:#ece8e1;--muted:#9aa7b2;--cyan:#00f0ff}
-*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 15% 15%,#2a2029 0,#0f1923 42%,#091017 100%);color:var(--text);font-family:Inter,Segoe UI,Arial,sans-serif;min-height:100vh}.wrap{max-width:1100px;margin:auto;padding:32px 22px 70px}.nav{display:flex;justify-content:space-between;align-items:center}.brand{font-weight:900;letter-spacing:.08em}.brand b{color:var(--red)}.pill{border:1px solid #2b3d49;padding:8px 13px;border-radius:999px;color:#a8c0cd;font-size:13px}.hero{display:grid;grid-template-columns:1.2fr .8fr;gap:32px;align-items:center;padding:90px 0 55px}.eyebrow{color:var(--red);font-size:13px;font-weight:800;letter-spacing:.18em}.hero h1{font-size:clamp(42px,7vw,76px);line-height:.95;margin:13px 0 20px;text-transform:uppercase}.hero p{color:var(--muted);font-size:18px;line-height:1.7;max-width:680px}.card{background:linear-gradient(145deg,rgba(22,35,45,.94),rgba(13,24,32,.94));border:1px solid #263945;border-radius:18px;padding:24px;box-shadow:0 30px 80px #0008}.card .tag{color:var(--cyan);font-size:12px}.profile{display:flex;gap:15px;align-items:center;margin:18px 0}.avatar{width:58px;height:58px;border-radius:14px;background:linear-gradient(135deg,var(--red),#7c4dff);display:grid;place-items:center;font-weight:900}.statgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}.stat{background:#0c151c;border:1px solid #22323c;border-radius:12px;padding:13px}.stat b{display:block;font-size:22px}.stat span{color:var(--muted);font-size:12px}.features{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.feature{background:#111e27;border:1px solid #21333f;border-radius:15px;padding:20px}.feature b{display:block;margin-bottom:8px}.feature p{color:var(--muted);font-size:14px;line-height:1.55;margin:0}.foot{margin-top:35px;color:#71818c;font-size:12px}@media(max-width:800px){.hero{grid-template-columns:1fr;padding-top:55px}.features{grid-template-columns:1fr}.hero h1{font-size:52px}}
-</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>V-Tracker 3.0</title>
+  <style>
+    :root {
+      --bg:#081217;
+      --card:#10212a;
+      --line:#1a3943;
+      --turq:#2fd6c4;
+      --turq2:#7de8ff;
+      --yellow:#f7d774;
+      --text:#e9f7fb;
+      --muted:#9eb7be;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Inter,Arial,sans-serif;background:linear-gradient(180deg,#081217,#0d1b22 65%,#12242d);color:var(--text)}
+    .wrap{max-width:1100px;margin:0 auto;padding:56px 20px}
+    .hero{display:grid;grid-template-columns:1.1fr .9fr;gap:28px;align-items:center}
+    .card{background:rgba(16,33,42,.92);border:1px solid var(--line);border-radius:24px;padding:24px;box-shadow:0 20px 50px rgba(0,0,0,.28)}
+    h1{font-size:54px;line-height:1.02;margin:0 0 16px}
+    h1 span{color:var(--turq)}
+    p{color:var(--muted);font-size:18px;line-height:1.6}
+    .pill{display:inline-block;padding:10px 14px;border:1px solid var(--line);border-radius:999px;background:rgba(47,214,196,.09);color:var(--turq2);font-size:14px;margin-bottom:14px}
+    .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:22px}
+    .kpi{padding:18px;border-radius:18px;background:#0c1b22;border:1px solid var(--line)}
+    .kpi b{display:block;color:var(--yellow);font-size:14px;margin-bottom:8px}
+    .kpi span{font-size:28px;font-weight:700}
+    ul{padding-left:18px;color:var(--muted);line-height:1.8}
+    .cta{display:flex;gap:12px;flex-wrap:wrap;margin-top:18px}
+    .btn{padding:12px 18px;border-radius:12px;background:var(--turq);color:#062126;text-decoration:none;font-weight:700}
+    .btn.alt{background:transparent;border:1px solid var(--line);color:var(--text)}
+    @media(max-width:900px){.hero,.grid{grid-template-columns:1fr}h1{font-size:40px}}
+  </style>
 </head>
-<body><div class="wrap"><div class="nav"><div class="brand">V-<b>TRACKER</b></div><div class="pill">Rebuild 2.0 • Online</div></div>
-<section class="hero"><div><div class="eyebrow">VALORANT DISCORD ASSISTANT</div><h1>Tek hesap.<br>Temiz veri.<br>Hızlı analiz.</h1><p>Riot ID doğrulama, PUUID tabanlı tek-kayıt kilidi, maç analizi, V-Coach, V-Coin ve moderasyon araçlarını tek botta birleştiren yenilenmiş V-Tracker.</p></div><div class="card"><div class="tag">LIVE PROFILE PREVIEW</div><div class="profile"><div class="avatar">V</div><div><b>Player#TAG</b><br><span style="color:#8fa1ad">API verified • PUUID locked</span></div></div><div class="statgrid"><div class="stat"><b>1.18</b><span>K/D</span></div><div class="stat"><b>24%</b><span>Headshot</span></div><div class="stat"><b>147</b><span>ADR</span></div><div class="stat"><b>57%</b><span>Win Rate</span></div></div></div></section>
-<section class="features"><div class="feature"><b>🔐 Tek-Kayıt Sistemi</b><p>Bir Discord hesabı farklı Riot hesaplarına tekrar kayıt olamaz. Riot hesabı sabit PUUID ile tutulur.</p></div><div class="feature"><b>📊 Performans Motoru</b><p>Son maçlardan K/D, HS, ADR, ACS, harita, ajan ve silah özetleri üretir.</p></div><div class="feature"><b>🧠 V-Coach</b><p>Oyuncu metriklerinden deterministik ve açıklanabilir çalışma önerileri çıkarır.</p></div><div class="feature"><b>💰 V-Coin</b><p>Günlük/haftalık ödül, transfer, sıralama ve profil özelleştirme sistemi.</p></div><div class="feature"><b>🛡️ Güvenlik</b><p>Token ve API anahtarları kaynak koda gömülmez; environment variable kullanılır.</p></div><div class="feature"><b>⚙️ Sunucu Araçları</b><p>Moderasyon, kanal kilidi, öneri, ses bağlantısı ve temel sunucu kurulumu.</p></div></section><div class="foot">V-Tracker is an independent community project and is not endorsed by Riot Games.</div></div></body></html>
+<body>
+  <div class="wrap">
+    <section class="hero">
+      <div>
+        <div class="pill">V-Tracker 3.0 • Player Intelligence</div>
+        <h1>Valorant istatistik botunu <span>daha akıllı</span> hale getir.</h1>
+        <p>Dashboard tarzı oyuncu profili, V-Score, butonlu panel, güvenli doğrulama, audit log ve güçlendirilmiş anti-spam ile yeniden tasarlanmış Discord botu.</p>
+        <div class="cta">
+          <a class="btn" href="/health">Sistem Durumu</a>
+          <a class="btn alt" href="https://discord.com/developers/applications" target="_blank" rel="noreferrer">Discord Developer Portal</a>
+        </div>
+      </div>
+      <div class="card">
+        <h2 style="margin-top:0;color:var(--turq2)">Bu sürümde gelenler</h2>
+        <ul>
+          <li>Oyuncu Hub: Genel, Performans, Ajan/Harita, Koç panelleri</li>
+          <li>Güvenli Riot doğrulama ve doğrulayıcı rol kontrolü</li>
+          <li>Global anti-spam, mention filtreleme, banner URL beyaz listesi</li>
+          <li>Ekonomi işlemlerinde daha güvenli atomik DB akışı</li>
+          <li>Admin audit log ve sistem durum komutu</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="grid">
+      <div class="kpi"><b>TEMA</b><span>Turkuaz + Açık Sarı</span></div>
+      <div class="kpi"><b>KULLANIM</b><span>Prefix + Slash</span></div>
+      <div class="kpi"><b>GÜVENLİK</b><span>Anti-Spam + Audit</span></div>
+    </section>
+  </div>
+</body>
+</html>

@@ -46,3 +46,14 @@ Bu komut yalnız Discord uygulamasının/botun sahibi tarafından kullanılabili
 ## Önemli güvenlik notu
 
 Yüklenen eski projede kaynak içine yazılmış Henrik API anahtarları vardı. Bu yeni ZIP'e hiçbir anahtar taşınmadı. Eski anahtarları Henrik panelinden iptal edip yeni anahtar üretmen önerilir. `.git` klasörü de eski sırları geçmişte saklayabileceği için yeni pakete dahil edilmedi.
+
+
+## 2.1 Manuel Riot hesap sahiplik doğrulaması
+
+`v!register` artık yalnızca Riot profilinin API'de bulunmasını kayıt için yeterli saymaz. Kullanıcı doğrulama talebi oluşturur; admin kanıtı kontrol ettikten sonra `v!verify @kullanıcı` ile onaylar veya `v!rejectverify @kullanıcı neden` ile reddeder. Onaydan sonra Discord ID ile Riot PUUID kalıcı olarak eşleştirilir.
+
+Önerilen Render değişkeni:
+
+- `VERIFICATION_CHANNEL_ID`: doğrulama taleplerinin gönderileceği Discord kanal ID'si. Ayarlanmazsa talep veritabanında bekler ve admin komutla onaylayabilir.
+
+Kanıt olarak Riot istemcisinde ilgili hesabın açık olduğunu gösteren ekran görüntüsü/kısa ekran kaydı kullanılabilir. Bot hiçbir zaman Riot şifresi veya giriş bilgisi istememelidir. Bu manuel yöntem resmi Riot RSO/OAuth değildir.
